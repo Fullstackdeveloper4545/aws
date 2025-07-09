@@ -36,7 +36,7 @@ def process_detail(request, process_id):
     file_process = get_object_or_404(FileProcess, unique_id=process_id)
     
     # Get all API calls for this process
-    api_calls = ApiCall.objects.filter(file_process=file_process).order_by('row_number')
+    api_calls = ApiCall.objects.filter(file_process=file_process).order_by('created_at')
     
     # Get statistics for this process
     total_api_calls = api_calls.count()

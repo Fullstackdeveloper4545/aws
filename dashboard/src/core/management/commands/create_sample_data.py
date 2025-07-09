@@ -114,9 +114,7 @@ class Command(BaseCommand):
                     ])
                 
                 ApiCall.objects.create(
-                    unique_id=process,
                     file_process=process,
-                    row_number=j + 1,
                     json_payload=payload,
                     api_status=api_status,
                     api_response=api_response,

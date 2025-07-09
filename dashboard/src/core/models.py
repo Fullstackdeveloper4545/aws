@@ -32,9 +32,7 @@ class FileProcess(models.Model):
 
 class ApiCall(models.Model):
     """Model for tracking API calls made during file transformation"""
-    
-    unique_id = models.ForeignKey(FileProcess, on_delete=models.CASCADE)
-    row_number = models.IntegerField()
+
     json_payload = models.JSONField()
     api_status = models.IntegerField()
     api_response = models.TextField(null=True, blank=True)
@@ -55,10 +53,9 @@ class ApiCall(models.Model):
         verbose_name = 'API Call'
         verbose_name_plural = 'API Calls'
         ordering = ['-created_at']
-        unique_together = ['unique_id', 'row_number']
     
     def __str__(self):
-        return f"API Call {self.row_number} for {self.unique_id} - Status: {self.api_status}"
+        return f"API Call for {self.unique_id} - Status: {self.api_status}"
     
     @property
     def is_successful(self):

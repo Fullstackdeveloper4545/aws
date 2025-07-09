@@ -54,6 +54,11 @@ Parameters:
     Description: PostgreSQL database password
     Default: sdlkj67hjvfWE0167VBggF
 
+  APIEndpoint:
+    Type: String
+    Description: API endpoint
+    Default: https://webhook.site/5d2c9fd0-7e2d-4348-9fd2-d5235a028e9a
+
   EC2KeyPairName:
     Type: AWS::EC2::KeyPair::KeyName
     Description: EC2 Key Pair for SSH access
@@ -493,6 +498,7 @@ Resources:
           PG_DB: !Ref PGDatabase
           PG_USER: !Ref PGUsername
           PG_PASSWORD: !Ref PGPassword
+          API_ENDPOINT: !Ref APIEndpoint
       VpcConfig:
         SecurityGroupIds:
           - !Ref LambdaSecurityGroup

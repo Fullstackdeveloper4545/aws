@@ -8,6 +8,7 @@ import io
 from datetime import datetime
 from typing import List, Dict, Optional
 from db_manager import DBManager
+from train_data_parser import parse_train_data_to_json
 
 # Configure logging
 logger = logging.getLogger()
@@ -101,33 +102,27 @@ def _extract_s3_records_from_sqs_body(sqs_body: Dict) -> List[Dict]:
         # SQS message containing S3 event
         return [sqs_body]
 
-def _should_process_file(key: str) -> bool:
-    """Check if file should be processed based on its location"""
-    return key.startswith('uploads/') and key.endswith('.csv')
-
-def _process_csv_file(file_content: str, key: str, unique_id: str, 
-                     sqs_manager: SQSManager, db_manager: DBManager) -> bool:
-    """Process CSV file and send individual rows to SQS"""
-    json_data_list = parse_csv_to_json(file_content, key)
-    if not json_data_list:
-        logger.error(f"Failed to parse CSV file {key}")
+def _process_data_file(file_content: str, key: str, unique_id: str, 
+                      sqs_manager: SQSManager, db_manager: DBManager) -> bool:
+    """Process train data file and send individual JSON objects to SQS"""
+    
+    try:
+        # Parse as train data (asterisk-delimited format)
+        json_data = parse_train_data_to_json(file_content, key)
+        sqs_manager.send_json_message(json_data, unique_id, key)
+        db_manager.update_status(unique_id, 'Queued')
+        logger.info(f"Successfully queued JSON objects for file {key}")
+        return True    
+            
+    except ValueError as e:
+        # Handle filename validation errors
+        logger.error(f"Filename validation failed for {key}: {str(e)}")
         db_manager.update_status(unique_id, 'Failed')
         return False
-    
-    # Send each JSON object to SQS for transformer
-    success_count = 0
-    for i, json_data in enumerate(json_data_list):
-        json_unique_id = f"{unique_id}_row_{i+1}"
-        if sqs_manager.send_json_message(json_data, json_unique_id, key):
-            success_count += 1
-    
-    if success_count > 0:
-        db_manager.update_status(unique_id, 'Queued')
-        logger.info(f"Successfully queued {success_count} JSON objects for file {key}")
-        return True
-    else:
+    except Exception as e:
+        # Handle other parsing errors
+        logger.error(f"Unexpected error processing train data file {key}: {str(e)}")
         db_manager.update_status(unique_id, 'Failed')
-        logger.error(f"Failed to queue any JSON objects for file {key}")
         return False
 
 def _process_single_file(s3_record: Dict, s3_manager: S3Manager, 
@@ -137,10 +132,7 @@ def _process_single_file(s3_record: Dict, s3_manager: S3Manager,
     bucket_name = s3_record['s3']['bucket']['name']
     key = s3_record['s3']['object']['key']
     
-    # Only process files in the uploads/ directory
-    if not _should_process_file(key):
-        logger.info(f"Skipping file {key} - not in uploads/ directory or not a csv file")
-        return
+    logger.info(f"Processing train data file {key}")
     
     unique_id = str(uuid.uuid4())
     s3_location = s3_manager.get_s3_location(key)
@@ -161,7 +153,7 @@ def _process_single_file(s3_record: Dict, s3_manager: S3Manager,
         db_manager.update_status(unique_id, 'Downloaded')
         
         # Process file based on type
-        success = _process_csv_file(file_content, key, unique_id, sqs_manager, db_manager)
+        success = _process_data_file(file_content, key, unique_id, sqs_manager, db_manager)
         
         if success:
             logger.info(f"Successfully processed file: {key}")

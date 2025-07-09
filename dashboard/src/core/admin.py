@@ -11,7 +11,7 @@ class FileProcessAdmin(admin.ModelAdmin):
 
 @admin.register(ApiCall)
 class ApiCallAdmin(admin.ModelAdmin):
-    list_display = ('file_process', 'row_number', 'api_status', 'created_at', 'is_successful')
+    list_display = ('file_process', 'api_status', 'created_at', 'is_successful')
     list_filter = ('api_status', 'created_at', 'file_process__status')
     search_fields = ('file_process__filename', 'error_message')
     readonly_fields = ('created_at',)

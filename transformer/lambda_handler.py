@@ -138,31 +138,22 @@ def _process_single_message(message_data: Dict, api_manager: APIManager,
     try:
         # Update status to Processing
         db_manager.update_status(unique_id, 'Processing')
-        
         logger.info(f"Processing JSON data for file: {original_file} with ID: {unique_id}")
         
         # Send JSON data to external API
         api_response = api_manager.send_json_data(json_data, unique_id, original_file)
         
         # Store API call details in database
-        try:
-            db_manager.insert_api_call(
-                unique_id, 
-                1,  # row_number (always 1 for JSON messages)
-                json_data, 
-                api_response['status_code'], 
-                api_response['response'] if api_response['success'] else None,
-                api_response['error'] if not api_response['success'] else None
-            )
-        except Exception as e:
-            logger.error(f"Error inserting API call into database: {str(e)}")
-        
+        db_manager.insert_api_call(
+            unique_id, 
+            json_data, 
+            api_response['status_code'], 
+            api_response['response'] if api_response['success'] else None,
+            api_response['error'] if not api_response['success'] else None
+        )
+        db_manager.update_status(unique_id, 'Processed')
+
         if api_response['success']:
-            # Update status to Processed
-            db_manager.update_status(unique_id, 'Processed')
-            
-            logger.info(f"Successfully sent JSON data to API for ID: {unique_id}")
-            
             return {
                 'unique_id': unique_id,
                 'original_file': original_file,
@@ -171,22 +162,16 @@ def _process_single_message(message_data: Dict, api_manager: APIManager,
                 'api_response': api_response['response']
             }
         else:
-            # Update status to Failed
-            db_manager.update_status(unique_id, 'Failed')
-            
             logger.error(f"Failed to send JSON data to API for ID: {unique_id}")
-            
             return {
                 'unique_id': unique_id,
                 'original_file': original_file,
                 'status': 'failed',
                 'error': api_response['error']
             }
-            
+        
     except Exception as e:
         logger.error(f"Error processing message for ID {unique_id}: {str(e)}")
-        db_manager.update_status(unique_id, 'Failed')
-        
         return {
             'unique_id': unique_id,
             'original_file': original_file,
@@ -224,14 +209,10 @@ def process_sqs_messages(event: Dict) -> Dict:
     api_manager = APIManager(api_endpoint)
     db_manager = DBManager()
     
-    processed_messages = []
-    
     try:
         # Process each SQS record
         for record in event['Records']:
-            result = _process_sqs_record(record, api_manager, db_manager)
-            if result:
-                processed_messages.append(result)
+            _process_sqs_record(record, api_manager, db_manager)
     
     except Exception as e:
         logger.error(f"Error in process_sqs_messages: {str(e)}")
@@ -240,13 +221,12 @@ def process_sqs_messages(event: Dict) -> Dict:
             'body': json.dumps({'error': str(e)})
         }
     
-    logger.info(f"Transformer completed. Processed {len(processed_messages)} messages")
+    logger.info("Transformer completed")
     
     return {
         'statusCode': 200,
         'body': json.dumps({
-            'message': f'Successfully processed {len(processed_messages)} messages',
-            'processed_messages': processed_messages
+            'message': 'Successfully processed'
         })
     }
 

@@ -34,8 +34,8 @@ class DBManager:
     @staticmethod
     def insert_process(unique_id, filename, s3_location, status):
         query = """
-            INSERT INTO file_processes (unique_id, filename, s3_location, status)
-            VALUES (%s, %s, %s, %s)
+            INSERT INTO file_processes (unique_id, filename, s3_location, status, created_at, updated_at)
+            VALUES (%s, %s, %s, %s, NOW(), NOW())
             ON CONFLICT (unique_id) DO NOTHING;
         """
         values = (unique_id, filename, s3_location, status)
@@ -43,7 +43,7 @@ class DBManager:
 
     @staticmethod
     def update_status(unique_id, status):
-        query = "UPDATE file_processes SET status = %s"
+        query = "UPDATE file_processes SET status = %s, updated_at = NOW()"
         values = (status,)
         where_clause = "WHERE unique_id = %s"
         where_values = (unique_id,)
@@ -51,19 +51,19 @@ class DBManager:
 
     @staticmethod
     def update_s3_location(unique_id, s3_location):
-        query = "UPDATE file_processes SET s3_location = %s"
+        query = "UPDATE file_processes SET s3_location = %s, updated_at = NOW()"
         values = (s3_location,)
         where_clause = "WHERE unique_id = %s"
         where_values = (unique_id,)
         DBManager.execute_query(query, values, where_clause, where_values)
 
     @staticmethod
-    def insert_api_call(unique_id, row_number, json_payload, api_status, api_response=None, error_message=None):
+    def insert_api_call(unique_id, json_payload, api_status, api_response=None, error_message=None):
         query = """
-            INSERT INTO api_calls (unique_id, row_number, json_payload, api_status, api_response, error_message, created_at)
-            VALUES (%s, %s, %s, %s, %s, %s, NOW());
+            INSERT INTO api_calls (unique_id, json_payload, api_status, api_response, error_message, created_at)
+            VALUES (%s, %s, %s, %s, %s, NOW());
         """
-        values = (unique_id, row_number, json.dumps(json_payload), api_status, api_response, error_message)
+        values = (unique_id, json.dumps(json_payload), api_status, api_response, error_message)
         DBManager.execute_query(query, values)
     
     def __init__(self):

@@ -1,4 +1,4 @@
-from django.shortcuts import render, get_object_or_404
+from django.shortcuts import render, get_object_or_404, redirect
 from django.contrib.auth.decorators import login_required
 from django.contrib import messages
 from django.conf import settings
@@ -30,13 +30,9 @@ def dashboard_home(request):
                 # Initialize S3 client using settings
                 s3_client = get_s3_client()
                 
-                # Generate unique filename
-                file_extension = os.path.splitext(uploaded_file.name)[1]
-                unique_filename = f"{uuid.uuid4()}{file_extension}"
-                
                 # Upload to S3 using settings
                 bucket_name = settings.AWS_STORAGE_BUCKET_NAME
-                s3_key = f"{settings.AWS_BUCKET_FOLDER}/{datetime.now().strftime('%Y-%m-%d')}/{unique_filename}"
+                s3_key = f"{settings.AWS_BUCKET_FOLDER}/{uploaded_file.name}"
                 
                 s3_client.upload_fileobj(
                     uploaded_file,
@@ -45,6 +41,7 @@ def dashboard_home(request):
                 )
             except Exception as e:
                 messages.error(request, f'Error uploading file: {str(e)}')
+                return redirect('core:dashboard_home')
     
     # Get statistics for cards
     total_processes = FileProcess.objects.count()

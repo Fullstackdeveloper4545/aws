@@ -1,11 +1,50 @@
 from django.shortcuts import render, get_object_or_404
-from django.db.models import Count, Q
 from django.contrib.auth.decorators import login_required
+from django.contrib import messages
+from django.conf import settings
+import boto3
+import os
+import uuid
+from datetime import datetime
 from .models import FileProcess, ApiCall
+
+def get_s3_client():
+    """Helper function to create S3 client using Django settings"""
+    return boto3.client(
+        's3',
+        aws_access_key_id=settings.AWS_ACCESS_KEY_ID,
+        aws_secret_access_key=settings.AWS_SECRET_ACCESS_KEY,
+        region_name=settings.AWS_S3_REGION_NAME
+    )
 
 @login_required
 def dashboard_home(request):
     """Dashboard home view showing file processes with statistics"""
+    if request.method == 'POST':
+        uploaded_file = request.FILES.get('file')
+        
+        if not uploaded_file:
+            messages.error(request, 'Please select a file to upload.')
+        else:
+            try:
+                # Initialize S3 client using settings
+                s3_client = get_s3_client()
+                
+                # Generate unique filename
+                file_extension = os.path.splitext(uploaded_file.name)[1]
+                unique_filename = f"{uuid.uuid4()}{file_extension}"
+                
+                # Upload to S3 using settings
+                bucket_name = settings.AWS_STORAGE_BUCKET_NAME
+                s3_key = f"{settings.AWS_BUCKET_FOLDER}/{datetime.now().strftime('%Y-%m-%d')}/{unique_filename}"
+                
+                s3_client.upload_fileobj(
+                    uploaded_file,
+                    bucket_name,
+                    s3_key
+                )
+            except Exception as e:
+                messages.error(request, f'Error uploading file: {str(e)}')
     
     # Get statistics for cards
     total_processes = FileProcess.objects.count()

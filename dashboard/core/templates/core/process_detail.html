@@ -1,0 +1,209 @@
+{% extends 'core/base.html' %}
+{% load static %}
+
+{% block title %}Process Detail - {{ file_process.filename }}{% endblock %}
+
+{% block extra_css %}
+<link href="{% static 'core/css/process_detail.css' %}" rel="stylesheet">
+{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center pt-3 pb-2 mb-3 border-bottom">
+    <div>
+        <h1 class="h2">Process Details</h1>
+        <p class="text-muted">{{ file_process.filename }}</p>
+    </div>
+    <div class="btn-toolbar mb-2 mb-md-0">
+        <div class="btn-group me-2">
+            <a href="{% url 'core:dashboard_home' %}" class="btn btn-sm btn-outline-secondary">
+                <i class="bi bi-arrow-left"></i> Back to Dashboard
+            </a>
+            <button type="button" class="btn btn-sm btn-outline-secondary">Export</button>
+        </div>
+    </div>
+</div>
+
+<!-- API Calls Summary Cards -->
+<div class="row mb-4">
+    <div class="col-lg-3 col-md-6 mb-3">
+        <div class="card shadow h-100">
+            <div class="card-body text-center">
+                <div class="text-success">
+                    <i class="bi bi-check-circle fa-2x"></i>
+                    <div class="h4">{{ successful_calls }}</div>
+                    <small>Successful</small>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-lg-3 col-md-6 mb-3">
+        <div class="card shadow h-100">
+            <div class="card-body text-center">
+                <div class="text-danger">
+                    <i class="bi bi-x-circle fa-2x"></i>
+                    <div class="h4">{{ failed_calls }}</div>
+                    <small>Failed</small>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-lg-3 col-md-6 mb-3">
+        <div class="card shadow h-100">
+            <div class="card-body text-center">
+                <div class="text-warning">
+                    <i class="bi bi-exclamation-triangle fa-2x"></i>
+                    <div class="h4">{{ error_calls }}</div>
+                    <small>With Errors</small>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-lg-3 col-md-6 mb-3">
+        <div class="card shadow h-100">
+            <div class="card-body text-center">
+                <div class="text-info">
+                    <i class="bi bi-list-ul fa-2x"></i>
+                    <div class="h4">{{ total_api_calls }}</div>
+                    <small>Total</small>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Process Information -->
+<div class="row mb-4">
+    <div class="col-12">
+        <div class="card shadow mb-4">
+            <div class="card-header py-3">
+                <h6 class="m-0 font-weight-bold text-primary">Process Information</h6>
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-md-6">
+                        <p><strong>Process ID:</strong> {{ file_process.unique_id }}</p>
+                        <p><strong>Filename:</strong> {{ file_process.filename }}</p>
+                        <p><strong>Status:</strong> 
+                            <span class="badge {% if file_process.status == 'Processed' %}bg-success{% elif file_process.status == 'Processing' %}bg-info{% elif file_process.status == 'Failed' %}bg-danger{% elif file_process.status == 'Pending' %}bg-warning{% else %}bg-secondary{% endif %}">
+                                {{ file_process.status }}
+                            </span>
+                        </p>
+                    </div>
+                    <div class="col-md-6">
+                        <p><strong>Created:</strong> {{ file_process.created_at|date:"M d, Y H:i:s" }}</p>
+                        <p><strong>Updated:</strong> {{ file_process.updated_at|date:"M d, Y H:i:s" }}</p>
+                        <p><strong>S3 Location:</strong> {{ file_process.s3_location|default:"Not specified" }}</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- API Calls Table -->
+<div class="card shadow mb-4">
+    <div class="card-header py-3">
+        <h6 class="m-0 font-weight-bold text-primary">API Calls</h6>
+    </div>
+    <div class="card-body">
+        <div class="table-responsive">
+            <table id="apiCallsTable" class="table table-bordered" width="100%" cellspacing="0">
+                <thead>
+                    <tr>
+                        <th>Row #</th>
+                        <th>Status Code</th>
+                        <th>Status</th>
+                        <th>Response</th>
+                        <th>Error Message</th>
+                        <th>Created</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for api_call in api_calls %}
+                    <tr>
+                        <td>{{ api_call.row_number }}</td>
+                        <td>
+                            <span class="badge {% if api_call.is_successful %}bg-success{% else %}bg-danger{% endif %}">
+                                {{ api_call.api_status }}
+                            </span>
+                        </td>
+                        <td>
+                            {% if api_call.is_successful %}
+                                <span class="text-success"><i class="bi bi-check-circle"></i> Success</span>
+                            {% else %}
+                                <span class="text-danger"><i class="bi bi-x-circle"></i> Failed</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            {% if api_call.api_response %}
+                                <button class="btn btn-sm btn-outline-info" 
+                                        data-bs-toggle="modal" 
+                                        data-bs-target="#responseModal{{ api_call.id }}">
+                                    View Response
+                                </button>
+                            {% else %}
+                                <span class="text-muted">No response</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            {% if api_call.error_message %}
+                                <span class="text-danger">{{ api_call.error_message|truncatechars:50 }}</span>
+                            {% else %}
+                                <span class="text-muted">No error</span>
+                            {% endif %}
+                        </td>
+                        <td>{{ api_call.created_at|date:"M d, Y H:i:s" }}</td>
+                        <td>
+                            <button class="btn btn-sm btn-outline-secondary" 
+                                    data-bs-toggle="modal" 
+                                    data-bs-target="#payloadModal{{ api_call.id }}">
+                                <i class="bi bi-eye"></i> Payload
+                            </button>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<!-- Response Modals -->
+{% for api_call in api_calls %}
+{% if api_call.api_response %}
+<div class="modal fade" id="responseModal{{ api_call.id }}" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">API Response - Row {{ api_call.row_number }}</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <pre><code>{{ api_call.api_response }}</code></pre>
+            </div>
+        </div>
+    </div>
+</div>
+{% endif %}
+
+<!-- Payload Modal -->
+<div class="modal fade" id="payloadModal{{ api_call.id }}" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">JSON Payload - Row {{ api_call.row_number }}</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <pre><code>{{ api_call.json_payload|pprint }}</code></pre>
+            </div>
+        </div>
+    </div>
+</div>
+{% endfor %}
+{% endblock %}
+
+{% block extra_js %}
+<script src="{% static 'core/js/process_detail.js' %}"></script>
+{% endblock %} 

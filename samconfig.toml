@@ -1,0 +1,12 @@
+version = 0.1
+
+[default.deploy.parameters]
+stack_name = "ftp-transformer"
+resolve_s3 = true
+s3_prefix = "ftp-transformer"
+region = "us-east-1"
+confirm_changeset = false
+capabilities = "CAPABILITY_NAMED_IAM"
+disable_rollback = true
+parameter_overrides = "FTPHost=\"ftp.example.com\" FTPUsername=\"ftpuser\" FTPDirectory=\"/\" S3BucketName=\"ftp-files-bucket-9824\" SQSQueueName=\"ftp-processing-queue\" FTPListenerFunctionName=\"ftp-listener\" TransformerFunctionName=\"transformer\" ScheduleExpression=\"rate(5 minutes)\""
+image_repositories = []

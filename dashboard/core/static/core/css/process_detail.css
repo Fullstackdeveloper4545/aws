@@ -1,0 +1,232 @@
+/* Process detail specific styles */
+
+/* Process information card */
+.card-body p {
+    margin-bottom: 0.75rem;
+}
+
+.card-body p strong {
+    color: #5a5c69;
+    font-weight: 600;
+}
+
+/* Summary cards - new top layout */
+.card-body .row.text-center .col-6 {
+    padding: 1rem 0.5rem;
+}
+
+.card-body .row.text-center .col-6 .h4 {
+    margin-bottom: 0.25rem;
+    font-weight: 700;
+}
+
+.card-body .row.text-center .col-6 small {
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    font-weight: 600;
+}
+
+/* Summary cards in single row layout */
+.col-lg-3 .card-body .h4 {
+    margin-bottom: 0.25rem;
+    font-weight: 700;
+    font-size: 2rem;
+}
+
+.col-lg-3 .card-body small {
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    font-weight: 600;
+}
+
+.col-lg-3 .card-body i {
+    margin-bottom: 0.5rem;
+}
+
+/* API calls table */
+#apiCallsTable {
+    font-size: 0.875rem;
+}
+
+#apiCallsTable th {
+    background-color: #f8f9fc;
+    border-bottom: 2px solid #e3e6f0;
+    font-weight: 600;
+    text-transform: uppercase;
+    font-size: 0.75rem;
+    letter-spacing: 0.05em;
+}
+
+#apiCallsTable td {
+    vertical-align: middle;
+}
+
+/* Status indicators */
+.text-success {
+    color: #1cc88a !important;
+}
+
+.text-danger {
+    color: #e74a3b !important;
+}
+
+.text-warning {
+    color: #f6c23e !important;
+}
+
+.text-info {
+    color: #36b9cc !important;
+}
+
+.text-muted {
+    color: #858796 !important;
+}
+
+/* Modal styling */
+.modal-dialog.modal-lg {
+    max-width: 800px;
+}
+
+.modal-body pre {
+    font-size: 0.875rem;
+    line-height: 1.5;
+    white-space: pre-wrap;
+    word-wrap: break-word;
+}
+
+.modal-body pre code {
+    color: #2c3e50;
+}
+
+/* Response and payload buttons */
+.btn-outline-info {
+    color: #36b9cc;
+    border-color: #36b9cc;
+}
+
+.btn-outline-info:hover {
+    background-color: #36b9cc;
+    border-color: #36b9cc;
+    color: white;
+}
+
+.btn-outline-secondary {
+    color: #858796;
+    border-color: #d1d3e2;
+}
+
+.btn-outline-secondary:hover {
+    background-color: #eaecf4;
+    border-color: #bac8f3;
+    color: #5a5c69;
+}
+
+/* Error message truncation */
+.text-danger {
+    max-width: 200px;
+    display: inline-block;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+    .card-body .row.text-center .col-6 {
+        padding: 0.5rem 0.25rem;
+    }
+    
+    .card-body .row.text-center .col-6 .h4 {
+        font-size: 1.5rem;
+    }
+    
+    .card-body .row.text-center .col-6 small {
+        font-size: 0.7rem;
+    }
+    
+    /* Summary cards responsive */
+    .col-lg-3 .card-body .h4 {
+        font-size: 1.5rem;
+    }
+    
+    .col-lg-3 .card-body small {
+        font-size: 0.7rem;
+    }
+    
+    .col-lg-3 .card-body i {
+        font-size: 1.5rem !important;
+        margin-bottom: 0.25rem;
+    }
+    
+    #apiCallsTable {
+        font-size: 0.75rem;
+    }
+    
+    #apiCallsTable th,
+    #apiCallsTable td {
+        padding: 0.5rem 0.25rem;
+    }
+    
+    .btn-sm {
+        padding: 0.125rem 0.25rem;
+        font-size: 0.75rem;
+    }
+}
+
+/* Loading states */
+.table-loading {
+    opacity: 0.6;
+    pointer-events: none;
+}
+
+/* Empty state for API calls */
+.table-empty {
+    text-align: center;
+    padding: 3rem;
+    color: #858796;
+}
+
+.table-empty i {
+    font-size: 4rem;
+    margin-bottom: 1rem;
+    opacity: 0.3;
+}
+
+/* Back button styling */
+.btn-outline-secondary i {
+    margin-right: 0.25rem;
+}
+
+/* Summary statistics hover effects */
+.card-body .row.text-center .col-6 {
+    transition: transform 0.2s ease-in-out;
+}
+
+.card-body .row.text-center .col-6:hover {
+    transform: scale(1.05);
+}
+
+/* Modal backdrop */
+.modal-backdrop {
+    background-color: rgba(58, 59, 69, 0.5);
+}
+
+/* DataTables customization for API calls */
+#apiCallsTable_wrapper .dataTables_length select {
+    border: 1px solid #d1d3e2;
+    border-radius: 0.35rem;
+    padding: 0.375rem 0.75rem;
+}
+
+#apiCallsTable_wrapper .dataTables_filter input {
+    border: 1px solid #d1d3e2;
+    border-radius: 0.35rem;
+    padding: 0.375rem 0.75rem;
+}
+
+#apiCallsTable_wrapper .dataTables_filter input:focus {
+    border-color: #bac8f3;
+    box-shadow: 0 0 0 0.2rem rgba(78, 115, 223, 0.25);
+} 

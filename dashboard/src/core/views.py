@@ -36,21 +36,11 @@ def process_detail(request, process_id):
     file_process = get_object_or_404(FileProcess, unique_id=process_id)
     
     # Get all API calls for this process
-    api_calls = ApiCall.objects.filter(file_process=file_process).order_by('created_at')
-    
-    # Get statistics for this process
-    total_api_calls = api_calls.count()
-    successful_calls = api_calls.filter(api_status__gte=200, api_status__lt=300).count()
-    failed_calls = api_calls.filter(Q(api_status__lt=200) | Q(api_status__gte=300)).count()
-    error_calls = api_calls.filter(error_message__isnull=False).count()
+    api_call = ApiCall.objects.filter(file_process=file_process).first()
     
     context = {
         'file_process': file_process,
-        'api_calls': api_calls,
-        'total_api_calls': total_api_calls,
-        'successful_calls': successful_calls,
-        'failed_calls': failed_calls,
-        'error_calls': error_calls,
+        'api_call': api_call,
     }
     
     return render(request, 'core/process_detail.html', context)

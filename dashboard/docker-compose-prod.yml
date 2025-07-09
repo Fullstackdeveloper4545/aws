@@ -1,7 +1,7 @@
 services:
   startupservice:
     build: .
-    command: ( python manage.py migrate || true ) && ( python manage.py collectstatic --noinput -y || true )
+    command: sh -c "( python manage.py migrate || true ) && ( python manage.py collectstatic --noinput || true )"
     volumes:
       - ./src:/app
     env_file:

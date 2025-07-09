@@ -4,3 +4,5 @@ __pycache__/
 .aws-sam/
 .venv/
 .env
+staticfiles/
+media/

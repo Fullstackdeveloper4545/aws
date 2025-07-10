@@ -24,16 +24,10 @@ def parse_filename(filename: str) -> Dict[str, str]:
     if '.' in filename:
         name_without_ext = filename.rsplit('.', 1)[0]
     
-    # Split by underscore to get SiteID_TrainSequenceNo
-    parts = name_without_ext.split('_')
-    if len(parts) >= 2:
-        # Extract siteID from the part before the last underscore
-        site_id = parts[-2]  # Second to last part
-        train_sequence = parts[-1]  # Last part
-        
-        # Clean up siteID if it contains the full path
-        if '/' in site_id:
-            site_id = site_id.split('/')[-1]
+    si_ts = name_without_ext.rsplit('-', 1)[-1].split('_')
+    if len(si_ts) == 2:
+        site_id = si_ts[0]
+        train_sequence = si_ts[1]
         
         # Validate that train_sequence is numeric
         if not train_sequence.isdigit():
@@ -42,7 +36,6 @@ def parse_filename(filename: str) -> Dict[str, str]:
         # Validate that site_id is not empty
         if not site_id or site_id.strip() == "":
             raise ValueError(f"Invalid filename format: site ID is empty in filename '{filename}'")
-            
     else:
         raise ValueError(f"Invalid filename format: expected 'SiteID_TrainSequenceNo' pattern in filename '{filename}'")
     

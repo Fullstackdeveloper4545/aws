@@ -40,6 +40,13 @@
                                 {{ file_process.status }}
                             </span>
                         </p>
+                        {% if file_process.status == 'Failed' and file_process.error_message %}
+                        <p><strong>Error Message:</strong></p>
+                        <div class="alert alert-danger">
+                            <i class="bi bi-exclamation-triangle me-2"></i>
+                            {{ file_process.error_message }}
+                        </div>
+                        {% endif %}
                     </div>
                     <div class="col-md-6">
                         <p><strong>Created:</strong> {{ file_process.created_at|date:"M d, Y H:i:s" }}</p>

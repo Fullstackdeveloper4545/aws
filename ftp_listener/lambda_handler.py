@@ -9,6 +9,7 @@ from datetime import datetime
 from typing import List, Dict, Optional
 from db_manager import DBManager
 from train_data_parser import parse_train_data_to_json
+import urllib.parse
 
 # Configure logging
 logger = logging.getLogger()
@@ -117,12 +118,12 @@ def _process_data_file(file_content: str, key: str, unique_id: str,
     except ValueError as e:
         # Handle filename validation errors
         logger.error(f"Filename validation failed for {key}: {str(e)}")
-        db_manager.update_status(unique_id, 'Failed')
+        db_manager.update_status(unique_id, 'Failed', error_message=str(e))
         return False
     except Exception as e:
         # Handle other parsing errors
         logger.error(f"Unexpected error processing train data file {key}: {str(e)}")
-        db_manager.update_status(unique_id, 'Failed')
+        db_manager.update_status(unique_id, 'Failed', error_message=str(e))
         return False
 
 def _process_single_file(s3_record: Dict, s3_manager: S3Manager, 
@@ -131,7 +132,7 @@ def _process_single_file(s3_record: Dict, s3_manager: S3Manager,
     # Extract S3 object information
     bucket_name = s3_record['s3']['bucket']['name']
     key = s3_record['s3']['object']['key']
-    
+    key = urllib.parse.unquote_plus(key)
     logger.info(f"Processing train data file {key}")
     
     unique_id = str(uuid.uuid4())
@@ -147,7 +148,7 @@ def _process_single_file(s3_record: Dict, s3_manager: S3Manager,
         file_content = s3_manager.download_file(key)
         if file_content is None:
             logger.error(f"Failed to download file {key} from S3")
-            db_manager.update_status(unique_id, 'Failed')
+            db_manager.update_status(unique_id, 'Failed', error_message=f"Failed to download file {key} from S3")
             return
         
         db_manager.update_status(unique_id, 'Downloaded')
@@ -162,7 +163,7 @@ def _process_single_file(s3_record: Dict, s3_manager: S3Manager,
             
     except Exception as e:
         logger.error(f"Error processing file {key}: {str(e)}")
-        db_manager.update_status(unique_id, 'Failed')
+        db_manager.update_status(unique_id, 'Failed', error_message=str(e))
 
 def _process_sqs_record(record: Dict, s3_manager: S3Manager, 
                        sqs_manager: SQSManager, db_manager: DBManager) -> None:

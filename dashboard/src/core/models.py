@@ -57,7 +57,7 @@ class ApiCall(models.Model):
         ordering = ['-created_at']
     
     def __str__(self):
-        return f"API Call for {self.unique_id} - Status: {self.api_status}"
+        return f"API Call for {self.file_process} - Status: {self.api_status}"
     
     @property
     def is_successful(self):

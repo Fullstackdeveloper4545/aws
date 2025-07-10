@@ -22,8 +22,8 @@
     <h1 class="h2">File Processing Dashboard</h1>
     <div class="btn-toolbar mb-2 mb-md-0">
         <div class="btn-group me-2">
-            <button type="button" class="btn btn-sm btn-outline-secondary">Export</button>
-            <button type="button" class="btn btn-sm btn-outline-secondary">Refresh</button>
+            <button type="button" class="btn btn-sm btn-outline-secondary" id="exportBtn">Export</button>
+            <button type="button" class="btn btn-sm btn-outline-secondary" id="refreshBtn">Refresh</button>
         </div>
     </div>
 </div>
@@ -99,6 +99,50 @@
     </div>
 </div>
 
+<!-- Filters Section -->
+<div class="card shadow mb-4">
+    <div class="card-header py-3">
+        <h6 class="m-0 font-weight-bold text-primary">Filters</h6>
+    </div>
+    <div class="card-body">
+        <div class="row g-3">
+            <div class="col-md-3">
+                <label for="siteIdFilter" class="form-label">Site ID</label>
+                <input type="text" class="form-control" id="siteIdFilter" name="site_id" placeholder="Enter Site ID">
+            </div>
+            <div class="col-md-3">
+                <label for="dateFromFilter" class="form-label">Date From</label>
+                <input type="date" class="form-control" id="dateFromFilter" name="date_from">
+            </div>
+            <div class="col-md-3">
+                <label for="dateToFilter" class="form-label">Date To</label>
+                <input type="date" class="form-control" id="dateToFilter" name="date_to">
+            </div>
+            <div class="col-md-3">
+                <label for="statusFilter" class="form-label">Status</label>
+                <select class="form-select" id="statusFilter" name="status">
+                    <option value="">All Statuses</option>
+                    <option value="Pending">Pending</option>
+                    <option value="Downloaded">Downloaded</option>
+                    <option value="Uploaded">Uploaded</option>
+                    <option value="Queued">Queued</option>
+                    <option value="Processing">Processing</option>
+                    <option value="Processed">Processed</option>
+                    <option value="Failed">Failed</option>
+                </select>
+            </div>
+            <div class="col-12">
+                <button type="button" class="btn btn-primary me-2" id="applyFilters">
+                    <i class="bi bi-funnel"></i> Apply Filters
+                </button>
+                <button type="button" class="btn btn-outline-secondary" id="clearFilters">
+                    <i class="bi bi-x-circle"></i> Clear Filters
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
 <!-- File Processes Table -->
 <div class="card shadow mb-4">
     <div class="card-header py-3 d-flex justify-content-between align-items-center">
@@ -119,6 +163,7 @@
                 <thead>
                     <tr>
                         <th>ID</th>
+                        <th>Site ID</th>
                         <th>Filename</th>
                         <th>Status</th>
                         <th>S3 Location</th>
@@ -128,26 +173,7 @@
                     </tr>
                 </thead>
                 <tbody>
-                    {% for process in file_processes %}
-                    <tr>
-                        <td>{{ process.unique_id|truncatechars:8 }}</td>
-                        <td>{{ process.filename }}</td>
-                        <td>
-                            <span class="badge {% if process.status == 'Processed' %}bg-success{% elif process.status == 'Processing' %}bg-info{% elif process.status == 'Failed' %}bg-danger{% elif process.status == 'Pending' %}bg-warning{% else %}bg-secondary{% endif %}">
-                                {{ process.status }}
-                            </span>
-                        </td>
-                        <td>{{ process.s3_location|default:"-" }}</td>
-                        <td>{{ process.created_at|date:"M d, Y H:i" }}</td>
-                        <td>{{ process.updated_at|date:"M d, Y H:i" }}</td>
-                        <td>
-                            <a href="{% url 'core:process_detail' process.unique_id %}" 
-                               class="btn btn-sm btn-primary">
-                                <i class="bi bi-eye"></i> View Details
-                            </a>
-                        </td>
-                    </tr>
-                    {% endfor %}
+                    <!-- Data will be loaded via AJAX -->
                 </tbody>
             </table>
         </div>

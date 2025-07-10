@@ -1,15 +1,68 @@
 // Dashboard specific JavaScript
 
 $(document).ready(function() {
-    // Initialize DataTable for processes
+    // Initialize DataTable for processes with server-side processing
     var processesTable;
-    var autoRefreshInterval;
     
     try {
         processesTable = $('#processesTable').DataTable({
+            processing: true,
+            serverSide: true,
+            ajax: {
+                url: '/dashboard/api/processes/',
+                type: 'GET',
+                data: function(d) {
+                    // Add filter parameters to the request
+                    d.site_id = $('#siteIdFilter').val();
+                    d.date_from = $('#dateFromFilter').val();
+                    d.date_to = $('#dateToFilter').val();
+                    d.status = $('#statusFilter').val();
+                }
+            },
+            columns: [
+                { data: 'id', name: 'id' },
+                { data: 'site_id', name: 'site_id' },
+                { data: 'filename', name: 'filename' },
+                { 
+                    data: 'status', 
+                    name: 'status',
+                    render: function(data, type, row) {
+                        var badgeClass = '';
+                        switch(data) {
+                            case 'Processed':
+                                badgeClass = 'bg-success';
+                                break;
+                            case 'Processing':
+                                badgeClass = 'bg-info';
+                                break;
+                            case 'Failed':
+                                badgeClass = 'bg-danger';
+                                break;
+                            case 'Pending':
+                                badgeClass = 'bg-warning';
+                                break;
+                            default:
+                                badgeClass = 'bg-secondary';
+                        }
+                        return '<span class="badge ' + badgeClass + '">' + data + '</span>';
+                    }
+                },
+                { data: 's3_location', name: 's3_location' },
+                { data: 'created_at', name: 'created_at' },
+                { data: 'updated_at', name: 'updated_at' },
+                { 
+                    data: null,
+                    name: 'actions',
+                    orderable: false,
+                    searchable: false,
+                    render: function(data, type, row) {
+                        return '<a href="' + row.detail_url + '" class="btn btn-sm btn-primary"><i class="bi bi-eye"></i> View Details</a>';
+                    }
+                }
+            ],
             responsive: true,
             pageLength: 25,
-            order: [[4, 'desc']], // Sort by created date descending
+            order: [[5, 'desc']], // Sort by created date descending
             language: {
                 search: "Search processes:",
                 lengthMenu: "Show _MENU_ processes per page",
@@ -21,7 +74,8 @@ $(document).ready(function() {
                     last: "Last",
                     next: "Next",
                     previous: "Previous"
-                }
+                },
+                processing: "Loading data..."
             },
             columnDefs: [
                 {
@@ -30,22 +84,27 @@ $(document).ready(function() {
                     className: 'text-monospace'
                 },
                 {
-                    targets: [2], // Status column
+                    targets: [1], // Site ID column
+                    width: '120px',
+                    className: 'text-monospace'
+                },
+                {
+                    targets: [3], // Status column
                     width: '120px',
                     orderable: true,
                     searchable: true
                 },
                 {
-                    targets: [3], // S3 Location column
+                    targets: [4], // S3 Location column
                     width: '200px',
                     className: 'text-truncate'
                 },
                 {
-                    targets: [4, 5], // Created and Updated columns
+                    targets: [5, 6], // Created and Updated columns
                     width: '140px'
                 },
                 {
-                    targets: [6], // Actions column
+                    targets: [7], // Actions column
                     width: '120px',
                     orderable: false,
                     searchable: false
@@ -61,30 +120,56 @@ $(document).ready(function() {
         $('head').append('<style id="spinner-css">.spin { animation: spin 1s linear infinite; } @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }</style>');
     }
 
+    // Filter form submission
+    $('#applyFilters').on('click', function(e) {
+        e.preventDefault();
+        if (processesTable) {
+            processesTable.ajax.reload();
+        }else{
+            console.log('No processes table found');
+        }
+    });
+
+    // Clear filters button
+    $('#clearFilters').on('click', function() {
+        $('#siteIdFilter').val('');
+        $('#dateFromFilter').val('');
+        $('#dateToFilter').val('');
+        $('#statusFilter').val('');
+        if (processesTable) {
+            processesTable.ajax.reload();
+        }else{
+            console.log('No processes table found');
+        }
+    });
+
     // Refresh button functionality
-    $('.btn-outline-secondary').filter(function() {
-        return $(this).text().includes('Refresh');
-    }).on('click', function() {
+    $('#refreshBtn').on('click', function() {
         var $btn = $(this);
         $btn.prop('disabled', true);
         $btn.html('<i class="bi bi-arrow-clockwise spin"></i> Refreshing...');
         
-        // Simulate refresh
-        setTimeout(function() {
-            location.reload();
-        }, 1000);
+        if (processesTable) {
+            processesTable.ajax.reload(function() {
+                $btn.prop('disabled', false);
+                $btn.html('Refresh');
+            });
+        } else {
+            setTimeout(function() {
+                $btn.prop('disabled', false);
+                $btn.html('Refresh');
+            }, 1000);
+        }
     });
 
     // Export button functionality
-    $('.btn-outline-secondary').filter(function() {
-        return $(this).text().includes('Export');
-    }).on('click', function() {
+    $('#exportBtn').on('click', function() {
         var $btn = $(this);
         $btn.prop('disabled', true);
         $btn.html('<i class="bi bi-download"></i> Exporting...');
         
         try {
-            // Export to CSV
+            // Export to CSV with current filters
             exportToCSV();
         } catch (error) {
             console.error('Error exporting CSV:', error);
@@ -103,27 +188,10 @@ $(document).ready(function() {
     }).on('mouseleave', 'tr', function() {
         $(this).removeClass('table-hover');
     });
-
-    // Auto-refresh functionality (every 30 seconds)
-    autoRefreshInterval = setInterval(function() {
-        if (!document.hidden) {
-            console.log('Auto-refresh check...');
-        }
-    }, 30000);
-
-    // Cleanup on page unload
-    $(window).on('beforeunload', function() {
-        if (autoRefreshInterval) {
-            clearInterval(autoRefreshInterval);
-        }
-        if (processesTable) {
-            processesTable.destroy();
-        }
-    });
 });
 
 // Direct file upload functions
-function triggerFileUpload() {
+function triggerFileUpload() {  
     // Trigger the hidden file input
     document.getElementById('fileInput').click();
 }
@@ -149,47 +217,31 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 });
 
-// Export to CSV function
+// Export to CSV function with current filters
 function exportToCSV() {
     try {
-        var table = $('#processesTable').DataTable();
-        var data = table.data().toArray();
+        // Get current filter values
+        var siteId = $('#siteIdFilter').val();
+        var dateFrom = $('#dateFromFilter').val();
+        var dateTo = $('#dateToFilter').val();
+        var status = $('#statusFilter').val();
         
-        var csv = 'ID,Filename,Status,S3 Location,Created,Updated\n';
-        
-        data.forEach(function(row) {
-            var csvRow = [];
-            // Skip the last column (actions)
-            for (var i = 0; i < row.length - 1; i++) {
-                var cell = row[i] || '';
-                
-                // Clean up HTML tags from all columns
-                cell = cell.replace(/<[^>]*>/g, '');
-                
-                // Trim whitespace
-                cell = cell.trim();
-                
-                // Escape quotes and wrap in quotes if contains comma
-                if (cell.toString().indexOf(',') !== -1 || cell.toString().indexOf('"') !== -1) {
-                    cell = '"' + cell.toString().replace(/"/g, '""') + '"';
-                }
-                csvRow.push(cell);
-            }
-            csv += csvRow.join(',') + '\n';
-        });
+        // Build export URL with filters
+        var exportUrl = '/dashboard/api/processes/?export=csv';
+        if (siteId) exportUrl += '&site_id=' + encodeURIComponent(siteId);
+        if (dateFrom) exportUrl += '&date_from=' + encodeURIComponent(dateFrom);
+        if (dateTo) exportUrl += '&date_to=' + encodeURIComponent(dateTo);
+        if (status) exportUrl += '&status=' + encodeURIComponent(status);
         
         // Create download link
-        var blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
         var link = document.createElement('a');
-        if (link.download !== undefined) {
-            var url = URL.createObjectURL(blob);
-            link.setAttribute('href', url);
-            link.setAttribute('download', 'file_processes_' + new Date().toISOString().split('T')[0] + '.csv');
-            link.style.visibility = 'hidden';
-            document.body.appendChild(link);
-            link.click();
-            document.body.removeChild(link);
-        }
+        link.setAttribute('href', exportUrl);
+        link.setAttribute('download', 'file_processes_' + new Date().toISOString().split('T')[0] + '.csv');
+        link.style.visibility = 'hidden';
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        
     } catch (error) {
         console.error('Error exporting CSV:', error);
         throw error;

@@ -42,12 +42,15 @@ class DBManager:
         DBManager.execute_query(query, values)
 
     @staticmethod
-    def update_status(unique_id, status, error_message=None):
+    def update_status(unique_id, status, error_message=None, site_id=None):
         query = "UPDATE file_processes SET status = %s, updated_at = NOW()"
         values = (status,)
         if error_message:
             query += ", error_message = %s"
             values += (error_message,)
+        if site_id:
+            query += ", site_id = %s"
+            values += (site_id,)
         where_clause = "WHERE unique_id = %s"
         where_values = (unique_id,)
         DBManager.execute_query(query, values, where_clause, where_values)

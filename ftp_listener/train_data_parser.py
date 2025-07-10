@@ -202,8 +202,9 @@ def parse_train_data_to_json(file_content: str, filename: str) -> Optional[Dict[
             if not line:
                 continue
             
-            # Split by asterisk delimiter
-            fields = line.split('*')
+            # Split by asterisk 
+            delimiter = line[3]
+            fields = line.split(delimiter)
             
             try:
                 segment_type = fields[0]

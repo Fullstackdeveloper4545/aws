@@ -106,24 +106,25 @@ def _extract_s3_records_from_sqs_body(sqs_body: Dict) -> List[Dict]:
 def _process_data_file(file_content: str, key: str, unique_id: str, 
                       sqs_manager: SQSManager, db_manager: DBManager) -> bool:
     """Process train data file and send individual JSON objects to SQS"""
-    
+    site_id = None
     try:
         # Parse as train data (asterisk-delimited format)
         json_data = parse_train_data_to_json(file_content, key)
+        site_id = json_data.get('siteID')
         sqs_manager.send_json_message(json_data, unique_id, key)
-        db_manager.update_status(unique_id, 'Queued')
+        db_manager.update_status(unique_id, 'Queued', site_id=site_id)
         logger.info(f"Successfully queued JSON objects for file {key}")
         return True    
             
     except ValueError as e:
         # Handle filename validation errors
         logger.error(f"Filename validation failed for {key}: {str(e)}")
-        db_manager.update_status(unique_id, 'Failed', error_message=str(e))
+        db_manager.update_status(unique_id, 'Failed', error_message=str(e), site_id=site_id)
         return False
     except Exception as e:
         # Handle other parsing errors
         logger.error(f"Unexpected error processing train data file {key}: {str(e)}")
-        db_manager.update_status(unique_id, 'Failed', error_message=str(e))
+        db_manager.update_status(unique_id, 'Failed', error_message=str(e), site_id=site_id)
         return False
 
 def _process_single_file(s3_record: Dict, s3_manager: S3Manager, 

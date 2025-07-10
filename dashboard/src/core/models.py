@@ -15,6 +15,7 @@ class FileProcess(models.Model):
     ]
     
     unique_id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    site_id = models.CharField(max_length=255, null=True, blank=True)
     filename = models.CharField(max_length=255)
     s3_location = models.CharField(max_length=500, null=True, blank=True)
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='Pending')

@@ -43,7 +43,7 @@
                         </p>
                         {% if file_process.status == 'Failed' and file_process.error_message %}
                         <p><strong>Error Message:</strong></p>
-                        <div class="alert alert-danger">
+                        <div class="text-danger bg-light border border-danger rounded p-3">
                             <i class="bi bi-exclamation-triangle me-2"></i>
                             {{ file_process.error_message }}
                         </div>
@@ -86,7 +86,7 @@
             <div class="col-md-6">
                 {% if api_call.error_message %}
                 <p><strong>Error Message:</strong></p>
-                <div class="alert alert-danger">
+                <div class="text-danger bg-light border border-danger rounded p-3">
                     {{ api_call.error_message }}
                 </div>
                 {% endif %}

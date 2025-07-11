@@ -1,250 +1,353 @@
-# FTP to S3 Lambda Handler with Transformer
+# Marium - FTP to S3 Data Processing Pipeline with Dashboard
 
-This project implements an automated FTP to S3 file processing system using AWS Lambda functions, SQS, and DynamoDB. The system monitors an FTP server every 5 minutes, downloads CSV files, uploads them to S3, and triggers a transformer lambda to process the files.
+A comprehensive data processing pipeline that monitors FTP servers, processes files through AWS Lambda functions, and provides a web dashboard for monitoring and management.
 
-## Architecture
+## 🏗️ Architecture Overview
 
 ```
-FTP Server → EventBridge (5min schedule) → FTP Listener Lambda → S3 → SQS → Transformer Lambda → Transformed Files in S3
+FTP Server → S3 Upload → EventBridge (5min schedule) → FTP Listener Lambda → SQS → Transformer Lambda → External API → Dashboard
 ```
 
-### Components
+### Core Components
 
-1. **EventBridge Rule**: Triggers the FTP Listener Lambda every 5 minutes
-2. **FTP Listener Lambda**: Connects to FTP server, downloads CSV files, uploads to S3, and sends SQS messages
-3. **S3 Bucket**: Stores original and transformed files
-4. **SQS Queue**: Triggers the Transformer Lambda when new files are uploaded
-5. **Transformer Lambda**: Processes files from S3 and creates transformed versions
-6. **DynamoDB Table**: Tracks file processing status and metadata
+1. **FTP Listener Lambda**: Monitors S3 for new file uploads, parses train data files, and queues JSON data
+2. **Transformer Lambda**: Processes JSON data from SQS and sends to external APIs
+3. **Django Dashboard**: Web interface for monitoring file processing status and API calls
+4. **PostgreSQL Database**: Stores file processing metadata and API call history
+5. **AWS Infrastructure**: S3, SQS, Lambda, RDS, VPC, and security groups
 
-## Prerequisites
+## 📁 Project Structure
+
+```
+middleware/
+├── dashboard/                 # Django web dashboard
+│   ├── src/
+│   │   ├── account/          # User authentication
+│   │   ├── core/             # File processing models and views
+│   │   └── dashboard/        # Django project settings
+│   ├── docker-compose.yml    # Development environment
+│   ├── Dockerfile           # Production container
+│   └── requirements.txt     # Python dependencies
+├── ftp_listener/            # FTP monitoring Lambda
+│   ├── lambda_handler.py    # Main Lambda function
+│   ├── db_manager.py        # Database operations
+│   └── train_data_parser.py # Train data parsing logic
+├── transformer/             # Data transformation Lambda
+│   ├── lambda_handler.py    # API integration function
+│   └── db_manager.py        # Database operations
+├── layer/                   # Lambda layer dependencies
+├── template.yaml            # Main CloudFormation template
+├── template_public_rds.yaml # Public RDS template
+├── template_private_rds_with_sec_grp.yaml # Private RDS template
+├── deploy.sh               # Deployment script
+└── samconfig.toml          # SAM configuration
+```
+
+## 🚀 Quick Start
+
+### Prerequisites
 
 - AWS CLI configured with appropriate permissions
 - Python 3.9+
-- AWS SAM CLI (optional, for local testing)
+- Docker and Docker Compose (for dashboard)
+- PostgreSQL (for local development)
 
-## Deployment
+### 1. Deploy AWS Infrastructure
 
-### 1. Update Parameters
+```bash
+# Clone the repository
+git clone <repository-url>
+cd middleware
 
-Edit the `template.yaml` file to customize the following parameters:
+# Run the deployment script
+chmod +x deploy.sh
+./deploy.sh
+```
+
+The deployment script will:
+- Create/update the CloudFormation stack
+- Set up VPC, subnets, security groups
+- Deploy Lambda functions with necessary IAM roles
+- Create S3 bucket, SQS queues, and RDS instance
+
+### 2. Configure Environment Variables
+
+Update the `template.yaml` parameters or use the deployment script with custom values:
 
 ```yaml
 Parameters:
-  FTPHost: "your-ftp-server.com"
-  FTPUsername: "your-username"
-  FTPPassword: "your-password"
-  FTPDirectory: "/path/to/files"
   S3BucketName: "your-unique-bucket-name"
-  DynamoDBTableName: "ftp-file-processing"
-  SQSQueueName: "ftp-processing-queue"
-  FTPListenerFunctionName: "ftp-listener"
-  TransformerFunctionName: "transformer"
-  ScheduleExpression: "rate(5 minutes)"
+  APIEndpoint: "https://your-api-endpoint.com"
+  PGPassword: "your-secure-password"
+  EC2KeyPairName: "your-key-pair"
 ```
 
-### 2. Deploy the Stack
+### 3. Start the Dashboard
 
 ```bash
-# Deploy using AWS CLI
-aws cloudformation create-stack \
-  --stack-name ftp-s3-transformer \
-  --template-body file://template.yaml \
-  --capabilities CAPABILITY_NAMED_IAM \
-  --parameters \
-    ParameterKey=FTPHost,ParameterValue=your-ftp-server.com \
-    ParameterKey=FTPUsername,ParameterValue=your-username \
-    ParameterKey=FTPPassword,ParameterValue=your-password
+cd dashboard
 
-# Or update existing stack
-aws cloudformation update-stack \
-  --stack-name ftp-s3-transformer \
-  --template-body file://template.yaml \
-  --capabilities CAPABILITY_NAMED_IAM \
-  --parameters \
-    ParameterKey=FTPHost,ParameterValue=your-ftp-server.com \
-    ParameterKey=FTPUsername,ParameterValue=your-username \
-    ParameterKey=FTPPassword,ParameterValue=your-password
+# Copy environment file
+cp env.example .env
+
+# Edit environment variables
+nano .env
+
+# Start with Docker Compose
+docker-compose up -d
+
+# Or run locally
+pip install -r requirements.txt
+python src/manage.py migrate
+python src/manage.py runserver
 ```
 
-### 3. Monitor Deployment
+## 🔧 Configuration
 
-```bash
-aws cloudformation describe-stacks --stack-name ftp-s3-transformer
-```
+### AWS Lambda Functions
 
-## How It Works
+#### FTP Listener Lambda
+- **Trigger**: S3 upload events via EventBridge
+- **Function**: `ftp_listener/lambda_handler.py`
+- **Environment Variables**:
+  - `S3_BUCKET`: S3 bucket name
+  - `SQS_QUEUE_URL`: SQS queue URL for transformer
 
-### 1. FTP Listener Lambda (Every 5 minutes)
+#### Transformer Lambda
+- **Trigger**: SQS messages from FTP listener
+- **Function**: `transformer/lambda_handler.py`
+- **Environment Variables**:
+  - `API_ENDPOINT`: External API endpoint
+  - `API_TIMEOUT`: Request timeout (default: 30s)
+  - `API_HEADERS`: Additional headers (JSON format)
 
-1. Connects to the configured FTP server
-2. Lists CSV files in the specified directory
-3. For each CSV file:
-   - Downloads the file from FTP
-   - Uploads it to S3 with a unique key
-   - Creates a DynamoDB record to track processing
-   - Sends an SQS message with file details
-   - Updates the DynamoDB status
+### Django Dashboard
 
-### 2. Transformer Lambda (Triggered by SQS)
-
-1. Receives SQS messages with file details
-2. Downloads the original file from S3
-3. Applies transformations:
-   - For CSV files: Adds a `transformed_at` column with timestamps
-   - For other files: Adds a transformation header
-4. Uploads the transformed file to S3 in a `transformed/` subdirectory
-5. Includes metadata about the transformation
-
-## File Structure
-
-```
-ftp_listener/
-├── lambda_handler.py    # FTP Listener Lambda code
-└── requirements.txt     # Python dependencies
-
-transformer/
-├── lambda_handler.py    # Transformer Lambda code
-└── requirements.txt     # Python dependencies
-
-template.yaml            # CloudFormation template
-README.md               # This file
-```
-
-## S3 File Organization
-
-```
-s3://your-bucket/
-├── ftp-files/
-│   └── 2024/01/15/
-│       ├── uuid1_filename1.csv
-│       └── uuid2_filename2.csv
-└── ftp-files/
-    └── 2024/01/15/
-        └── transformed/
-            ├── uuid1_filename1_transformed.csv
-            └── uuid2_filename2_transformed.csv
-```
-
-## DynamoDB Schema
-
-```json
-{
-  "unique_id": "uuid-string",
-  "filename": "original-filename.csv",
-  "s3_location": "s3://bucket/path/to/file.csv",
-  "status": "Pending|Downloaded|Processed|Failed",
-  "created_at": "2024-01-15T10:30:00Z",
-  "updated_at": "2024-01-15T10:35:00Z"
+#### Database Configuration
+```python
+DATABASES = {
+    'default': {
+        'ENGINE': 'django.db.backends.postgresql',
+        'NAME': 'marium_dashboard',
+        'USER': 'postgres',
+        'PASSWORD': 'your_password',
+        'HOST': 'localhost',  # or RDS endpoint
+        'PORT': '5432',
+    }
 }
 ```
 
-## SQS Message Format
-
-```json
-{
-  "bucket_name": "your-bucket-name",
-  "key": "ftp-files/2024/01/15/uuid_filename.csv",
-  "unique_id": "uuid-string",
-  "timestamp": "2024-01-15T10:30:00Z"
-}
+#### AWS S3 Configuration
+```python
+AWS_ACCESS_KEY_ID = 'your-access-key'
+AWS_SECRET_ACCESS_KEY = 'your-secret-key'
+AWS_STORAGE_BUCKET_NAME = 'your-bucket-name'
+AWS_S3_REGION_NAME = 'us-east-1'
 ```
 
-## Monitoring and Logging
+## 📊 Data Models
+
+### FileProcess Model
+Tracks file processing status and metadata:
+
+```python
+class FileProcess(models.Model):
+    unique_id = models.UUIDField(primary_key=True)
+    site_id = models.CharField(max_length=255)
+    filename = models.CharField(max_length=255)
+    s3_location = models.CharField(max_length=500)
+    status = models.CharField(max_length=20)  # Pending, Downloaded, Queued, Processing, Processed, Failed
+    error_message = models.TextField(null=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+```
+
+### ApiCall Model
+Stores API call history and responses:
+
+```python
+class ApiCall(models.Model):
+    file_process = models.ForeignKey(FileProcess, on_delete=models.CASCADE)
+    json_payload = models.JSONField()
+    api_status = models.IntegerField()
+    api_response = models.TextField(null=True)
+    error_message = models.TextField(null=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+```
+
+## 🔄 Data Flow
+
+### 1. File Upload Process
+1. File uploaded to S3 bucket
+2. EventBridge triggers FTP Listener Lambda
+3. Lambda parses train data file into JSON format
+4. JSON data sent to SQS queue
+5. Database updated with processing status
+
+### 2. Data Transformation Process
+1. Transformer Lambda receives SQS message
+2. JSON data sent to external API endpoint
+3. API response and status stored in database
+4. File processing status updated
+
+### 3. Dashboard Monitoring
+1. Django dashboard queries database
+2. Displays file processing status and API call history
+3. Provides user authentication and management
+4. Real-time monitoring of pipeline health
+
+## 🐳 Docker Deployment
+
+### Development Environment
+```bash
+cd dashboard
+docker-compose up -d
+```
+
+### Production Environment
+```bash
+cd dashboard
+docker-compose -f docker-compose-prod.yml up -d
+```
+
+## 🔍 Monitoring and Logging
 
 ### CloudWatch Logs
-
 - **FTP Listener**: `/aws/lambda/ftp-listener`
 - **Transformer**: `/aws/lambda/transformer`
 
 ### Key Metrics to Monitor
-
 - Lambda execution duration and errors
 - SQS queue depth and message processing
-- DynamoDB read/write capacity
+- RDS connection pool and query performance
 - S3 bucket storage and access patterns
+- API response times and success rates
 
-## Customization
+### Dashboard Monitoring
+- File processing status overview
+- API call success/failure rates
+- Error message tracking
+- Processing timeline visualization
 
-### Modifying Transformations
+## 🛠️ Development
 
-Edit the `transformer/lambda_handler.py` file to customize file transformations:
+### Local Development Setup
 
-```python
-def transform_csv_content(content: str) -> str:
-    # Add your custom CSV transformation logic here
-    lines = content.split('\n')
-    transformed_lines = []
-    
-    for i, line in enumerate(lines):
-        if i == 0:
-            # Customize header transformation
-            transformed_lines.append(f"{line},custom_column")
-        else:
-            if line.strip():
-                # Customize data row transformation
-                transformed_lines.append(f"{line},custom_value")
-    
-    return '\n'.join(transformed_lines)
+1. **Set up Python environment**:
+```bash
+python -m venv venv
+source venv/bin/activate  # On Windows: venv\Scripts\activate
+pip install -r dashboard/requirements.txt
 ```
 
-### Changing Schedule
-
-Update the `ScheduleExpression` parameter in `template.yaml`:
-
-```yaml
-ScheduleExpression: "rate(1 hour)"  # Every hour
-ScheduleExpression: "cron(0 */2 * * ? *)"  # Every 2 hours
-ScheduleExpression: "cron(0 9 * * ? *)"  # Daily at 9 AM
+2. **Configure local database**:
+```bash
+# Install PostgreSQL locally or use Docker
+docker run --name postgres -e POSTGRES_PASSWORD=password -p 5432:5432 -d postgres
 ```
 
-## Troubleshooting
+3. **Run Django development server**:
+```bash
+cd dashboard/src
+python manage.py migrate
+python manage.py createsuperuser
+python manage.py runserver
+```
+
+### Testing Lambda Functions Locally
+
+```bash
+# Install SAM CLI
+pip install aws-sam-cli
+
+# Test FTP Listener
+sam local invoke FTPListenerFunction --event events/s3-upload-event.json
+
+# Test Transformer
+sam local invoke TransformerFunction --event events/sqs-message-event.json
+```
+
+## 🔒 Security Considerations
+
+- **IAM Roles**: Least privilege principle for Lambda functions
+- **VPC Configuration**: Private subnets for RDS, public subnets for internet access
+- **Security Groups**: Restrictive inbound/outbound rules
+- **Encryption**: Data encrypted at rest and in transit
+- **Secrets Management**: Consider using AWS Secrets Manager for production
+
+## 💰 Cost Optimization
+
+- **Lambda**: Optimize timeout and memory settings
+- **RDS**: Use appropriate instance size and storage
+- **S3**: Implement lifecycle policies for old files
+- **SQS**: Monitor queue depth and adjust processing
+- **CloudWatch**: Set up billing alerts
+
+## 🚨 Troubleshooting
 
 ### Common Issues
 
-1. **FTP Connection Failed**
-   - Check FTP server credentials and connectivity
-   - Verify firewall settings
-   - Check Lambda timeout settings
+1. **Lambda Function Errors**
+   ```bash
+   aws logs tail /aws/lambda/ftp-listener --follow
+   aws logs tail /aws/lambda/transformer --follow
+   ```
 
-2. **S3 Upload Failed**
-   - Verify IAM permissions
-   - Check S3 bucket name and region
-   - Ensure bucket exists and is accessible
+2. **Database Connection Issues**
+   - Check RDS security group rules
+   - Verify database credentials
+   - Test connectivity from Lambda VPC
 
-3. **SQS Message Processing Failed**
-   - Check SQS queue permissions
-   - Verify message format
-   - Monitor CloudWatch logs for errors
+3. **SQS Message Processing**
+   ```bash
+   aws sqs get-queue-attributes --queue-url <queue-url> --attribute-names All
+   ```
 
-### Debugging
+4. **Dashboard Issues**
+   - Check Django logs: `docker-compose logs dashboard`
+   - Verify database migrations: `python manage.py showmigrations`
+   - Test static files: `python manage.py collectstatic`
+
+### Debugging Commands
 
 ```bash
-# Check Lambda logs
-aws logs tail /aws/lambda/ftp-listener --follow
-aws logs tail /aws/lambda/transformer --follow
+# Check CloudFormation stack status
+aws cloudformation describe-stacks --stack-name ftp-transformer
+
+# List Lambda functions
+aws lambda list-functions
 
 # Check SQS queue status
-aws sqs get-queue-attributes --queue-url https://sqs.region.amazonaws.com/account/queue-name --attribute-names All
+aws sqs list-queues
 
-# Check DynamoDB items
-aws dynamodb scan --table-name ftp-file-processing --limit 10
+# Test database connectivity
+psql -h <rds-endpoint> -U postgres -d marium_dashboard
 ```
 
-## Security Considerations
+## 📈 Scaling Considerations
 
-- FTP credentials are stored as Lambda environment variables (consider using AWS Secrets Manager for production)
-- S3 bucket has public access blocked
-- IAM roles follow least privilege principle
-- All data is encrypted at rest and in transit
+- **Horizontal Scaling**: Multiple Lambda instances for high throughput
+- **Database Scaling**: RDS read replicas for dashboard queries
+- **Caching**: Redis for session storage and API response caching
+- **CDN**: CloudFront for static assets
+- **Auto Scaling**: Application Load Balancer for dashboard
 
-## Cost Optimization
+## 🤝 Contributing
 
-- DynamoDB uses on-demand billing (PAY_PER_REQUEST)
-- S3 lifecycle policy deletes files after 365 days
-- Lambda timeout set to 5 minutes (300 seconds)
-- Consider adjusting schedule frequency based on needs
+1. Fork the repository
+2. Create a feature branch
+3. Make your changes
+4. Add tests for new functionality
+5. Submit a pull request
 
-## Support
+## 📄 License
 
-For issues or questions, check the CloudWatch logs and AWS CloudFormation stack events for detailed error information. 
+This project is licensed under the MIT License - see the LICENSE file for details.
+
+## 🆘 Support
+
+For issues or questions:
+1. Check CloudWatch logs for detailed error information
+2. Review AWS CloudFormation stack events
+3. Consult the troubleshooting section above
+4. Create an issue in the repository with detailed logs and error messages 

@@ -57,7 +57,7 @@ Parameters:
   APIEndpoint:
     Type: String
     Description: API endpoint
-    Default: https://webhook.site/5d2c9fd0-7e2d-4348-9fd2-d5235a028e9a
+    Default: https://trackageadminbackend.ihrailsoftware.com/api/v1/readers/process_reader_data
 
   EC2KeyPairName:
     Type: AWS::EC2::KeyPair::KeyName

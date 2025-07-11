@@ -232,4 +232,4 @@ def parse_train_data_to_json(file_content: str, filename: str) -> Optional[Dict[
         
     except Exception as e:
         logger.error(f"Error parsing train data file {filename}: {str(e)}")
-        return None
+        raise ValueError(f"Error parsing train data file {filename}: {str(e)}")

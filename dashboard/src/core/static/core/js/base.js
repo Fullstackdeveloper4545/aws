@@ -45,20 +45,20 @@ $(document).ready(function() {
         }
     });
 
-    // Add loading state to buttons
-    $('.btn').on('click', function() {
-        var $btn = $(this);
-        if (!$btn.hasClass('btn-loading')) {
-            $btn.addClass('btn-loading');
-            $btn.prop('disabled', true);
+    // // Add loading state to buttons
+    // $('.btn').on('click', function() {
+    //     var $btn = $(this);
+    //     if (!$btn.hasClass('btn-loading')) {
+    //         $btn.addClass('btn-loading');
+    //         $btn.prop('disabled', true);
             
-            // Remove loading state after 2 seconds (for demo purposes)
-            setTimeout(function() {
-                $btn.removeClass('btn-loading');
-                $btn.prop('disabled', false);
-            }, 2000);
-        }
-    });
+    //         // Remove loading state after 2 seconds (for demo purposes)
+    //         setTimeout(function() {
+    //             $btn.removeClass('btn-loading');
+    //             $btn.prop('disabled', false);
+    //         }, 2000);
+    //     }
+    // });
 
     // Auto-hide alerts after 5 seconds
     $('.alert').each(function() {

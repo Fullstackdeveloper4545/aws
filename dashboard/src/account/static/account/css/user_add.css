@@ -1,0 +1,195 @@
+/* User Add specific styles */
+
+/* Form styling */
+.form-control,
+.form-select {
+    border: 1px solid #d1d3e2;
+    border-radius: 0.35rem;
+    padding: 0.375rem 0.75rem;
+    font-size: 0.875rem;
+    transition: border-color 0.15s ease-in-out, box-shadow 0.15s ease-in-out;
+}
+
+.form-control:focus,
+.form-select:focus {
+    border-color: #bac8f3;
+    box-shadow: 0 0 0 0.2rem rgba(78, 115, 223, 0.25);
+}
+
+.form-label {
+    font-weight: 600;
+    color: #5a5c69;
+    font-size: 0.875rem;
+    margin-bottom: 0.5rem;
+}
+
+/* Button styling */
+.btn {
+    font-size: 0.875rem;
+    padding: 0.375rem 0.75rem;
+    border-radius: 0.35rem;
+    transition: all 0.15s ease-in-out;
+}
+
+.btn-primary {
+    background-color: #4e73df;
+    border-color: #4e73df;
+}
+
+.btn-primary:hover {
+    background-color: #2e59d9;
+    border-color: #2653d4;
+}
+
+.btn-outline-secondary {
+    border-color: #d1d3e2;
+    color: #858796;
+}
+
+.btn-outline-secondary:hover {
+    background-color: #eaecf4;
+    border-color: #bac8f3;
+    color: #5a5c69;
+}
+
+/* Alert styling */
+.alert-info {
+    background-color: #d1ecf1;
+    border-color: #bee5eb;
+    color: #0c5460;
+}
+
+.alert-info .bi {
+    color: #0c5460;
+}
+
+/* Card styling */
+.card {
+    border: none;
+    box-shadow: 0 0.15rem 1.75rem 0 rgba(58, 59, 69, 0.15);
+}
+
+.card-header {
+    background-color: #f8f9fc;
+    border-bottom: 1px solid #e3e6f0;
+    font-weight: 600;
+    color: #5a5c69;
+}
+
+/* Form validation */
+.is-invalid {
+    border-color: #e74a3b !important;
+}
+
+.is-invalid:focus {
+    border-color: #e74a3b !important;
+    box-shadow: 0 0 0 0.2rem rgba(231, 74, 59, 0.25) !important;
+}
+
+.invalid-feedback {
+    display: block;
+    color: #e74a3b;
+    font-size: 0.875rem;
+    margin-top: 0.25rem;
+}
+
+.form-text {
+    color: #858796;
+    font-size: 0.875rem;
+    margin-top: 0.25rem;
+}
+
+/* Responsive design */
+@media (max-width: 768px) {
+    .col-md-6 {
+        margin-bottom: 1rem;
+    }
+    
+    .btn {
+        width: 100%;
+        margin-bottom: 0.5rem;
+    }
+    
+    .d-flex.justify-content-between {
+        flex-direction: column;
+    }
+    
+    .d-flex.justify-content-between .btn {
+        margin-bottom: 0.5rem;
+    }
+}
+
+/* Loading state */
+.btn:disabled {
+    opacity: 0.65;
+    cursor: not-allowed;
+}
+
+/* Icon styling */
+.bi {
+    margin-right: 0.5rem;
+}
+
+/* Animation for form submission */
+.form-submitting {
+    opacity: 0.6;
+    pointer-events: none;
+}
+
+/* Success state */
+.form-success {
+    border-color: #1cc88a !important;
+}
+
+.form-success:focus {
+    border-color: #1cc88a !important;
+    box-shadow: 0 0 0 0.2rem rgba(28, 200, 138, 0.25) !important;
+}
+
+/* Password checklist styling */
+.password-checklist {
+    background-color: #f8f9fc;
+    border: 1px solid #e3e6f0;
+    border-radius: 0.35rem;
+    padding: 1rem;
+    margin-top: 0.5rem;
+}
+
+.password-checklist .form-text {
+    margin-bottom: 0.75rem;
+    color: #5a5c69;
+    font-weight: 600;
+}
+
+.requirement-item {
+    display: flex;
+    align-items: center;
+    font-size: 0.875rem;
+    margin-bottom: 0.5rem;
+    transition: color 0.2s ease-in-out;
+}
+
+.requirement-item:last-child {
+    margin-bottom: 0;
+}
+
+.requirement-item.text-success {
+    color: #1cc88a !important;
+}
+
+.requirement-item.text-muted {
+    color: #858796 !important;
+}
+
+.requirement-item .bi {
+    font-size: 1rem;
+    margin-right: 0.5rem;
+}
+
+.requirement-item .bi-check-circle-fill {
+    color: #1cc88a;
+}
+
+.requirement-item .bi-circle {
+    color: #d1d3e2;
+}

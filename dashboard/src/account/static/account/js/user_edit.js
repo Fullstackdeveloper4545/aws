@@ -106,14 +106,21 @@ $(document).ready(function() {
     $('input[name="email"]').on('input', function() {
         clearTimeout(emailTimeout);
         var email = $(this).val();
+        var emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
         
-        if (email !== originalEmail && email.length >= 3) {
+        // Only check availability if it's a valid email format, has at least 3 characters, and is different from original
+        if (email !== originalEmail && email.length >= 3 && emailRegex.test(email)) {
             emailTimeout = setTimeout(function() {
                 checkEmailAvailability(email);
             }, 500);
         } else if (email === originalEmail) {
             $(this).removeClass('is-invalid is-valid');
-            $(this).next('.invalid-feedback, .valid-feedback').remove();
+            $(this).siblings('.invalid-feedback, .valid-feedback').remove();
+        } else {
+            // Clear any existing availability feedback if not a valid email
+            var input = $(this);
+            input.siblings('.valid-feedback').remove();
+            input.removeClass('is-valid');
         }
     });
     
@@ -213,13 +220,14 @@ function checkEmailAvailability(email) {
         data: { email: email },
         success: function(response) {
             var input = $('input[name="email"]');
+            // Remove all existing feedback messages
+            input.siblings('.invalid-feedback, .valid-feedback').remove();
+            
             if (response.available) {
                 input.removeClass('is-invalid').addClass('is-valid');
-                input.next('.invalid-feedback, .valid-feedback').remove();
                 input.after('<div class="valid-feedback">Email is available!</div>');
             } else {
                 input.removeClass('is-valid').addClass('is-invalid');
-                input.next('.invalid-feedback, .valid-feedback').remove();
                 input.after('<div class="invalid-feedback">Email is already taken.</div>');
             }
         },

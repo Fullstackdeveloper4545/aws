@@ -87,39 +87,11 @@ Resources:
     Metadata:
       BuildMethod: python3.9
 
-  # SQS Queue for Transformer
-  SQSQueue:
-    Type: AWS::SQS::Queue
-    Properties:
-      QueueName: !Ref SQSQueueName
-      VisibilityTimeout: 300
-      MessageRetentionPeriod: 1209600  # 14 days
+  # Note: SQSQueue is now created in the infrastructure stack
+  # and imported here via cross-stack references
 
-  # SQS Queue for FTP Listener
-  SourceQueue:
-    Type: AWS::SQS::Queue
-    Properties:
-      QueueName: !Ref SourceQueueName
-      VisibilityTimeout: 300
-      MessageRetentionPeriod: 1209600  # 14 days
-
-  # SQS Queue Policy to allow S3 notifications
-  SourceQueuePolicy:
-    Type: AWS::SQS::QueuePolicy
-    Properties:
-      Queues:
-        - !Ref SourceQueue
-      PolicyDocument:
-        Version: '2012-10-17'
-        Statement:
-          - Effect: Allow
-            Principal:
-              Service: s3.amazonaws.com
-            Action: sqs:SendMessage
-            Resource: !GetAtt SourceQueue.Arn
-            Condition:
-              ArnLike:
-                aws:SourceArn: !Sub "arn:aws:s3:::${S3BucketName}"
+  # Note: SourceQueue is now created in the infrastructure stack
+  # and imported here via cross-stack references
 
   # IAM Role for FTP Listener Lambda
   SourceExecutionRole:
@@ -151,13 +123,15 @@ Resources:
                   - sqs:SendMessage
                   - sqs:GetQueueAttributes
                   - sqs:ReceiveMessage
-                Resource: !GetAtt SQSQueue.Arn
+                Resource: !ImportValue 
+                  Fn::Sub: "${InfrastructureStackName}-SQSQueueArn"
               - Effect: Allow
                 Action:
                   - sqs:ReceiveMessage
                   - sqs:DeleteMessage
                   - sqs:GetQueueAttributes
-                Resource: !GetAtt SourceQueue.Arn
+                Resource: !ImportValue 
+                  Fn::Sub: "${InfrastructureStackName}-SourceQueueArn"
 
   # IAM Role for Transformer Lambda
   TransformerExecutionRole:
@@ -189,7 +163,8 @@ Resources:
                   - sqs:DeleteMessage
                   - sqs:GetQueueAttributes
                   - sqs:ReceiveMessage
-                Resource: !GetAtt SQSQueue.Arn
+                Resource: !ImportValue 
+                  Fn::Sub: "${InfrastructureStackName}-SQSQueueArn"
 
   # FTP Listener Lambda Function
   SourceFunction:
@@ -208,7 +183,10 @@ Resources:
         Variables:
           S3_BUCKET: !ImportValue 
             Fn::Sub: "${InfrastructureStackName}-S3BucketName"
-          SQS_QUEUE_URL: !Ref SQSQueue
+          SQS_QUEUE_URL: !ImportValue 
+            Fn::Sub: "${InfrastructureStackName}-SQSQueueUrl"
+          SOURCE_QUEUE_URL: !ImportValue 
+            Fn::Sub: "${InfrastructureStackName}-SourceQueueUrl"
           PG_HOST: !ImportValue 
             Fn::Sub: "${InfrastructureStackName}-RDSInstanceEndpoint"
           PG_PORT: !Ref PGPort
@@ -266,13 +244,15 @@ Resources:
       FunctionName: !Ref SourceFunction
       Action: lambda:InvokeFunction
       Principal: sqs.amazonaws.com
-      SourceArn: !GetAtt SourceQueue.Arn
+      SourceArn: !ImportValue 
+        Fn::Sub: "${InfrastructureStackName}-SourceQueueArn"
 
   # SQS Event Source Mapping for FTP Listener Lambda
   SourceSQSEventSourceMapping:
     Type: AWS::Lambda::EventSourceMapping
     Properties:
-      EventSourceArn: !GetAtt SourceQueue.Arn
+      EventSourceArn: !ImportValue 
+        Fn::Sub: "${InfrastructureStackName}-SourceQueueArn"
       FunctionName: !Ref SourceFunction
       BatchSize: 1
       Enabled: true
@@ -284,13 +264,15 @@ Resources:
       FunctionName: !Ref TransformerFunction
       Action: lambda:InvokeFunction
       Principal: sqs.amazonaws.com
-      SourceArn: !GetAtt SQSQueue.Arn
+      SourceArn: !ImportValue 
+        Fn::Sub: "${InfrastructureStackName}-SQSQueueArn"
 
   # SQS Event Source Mapping for Transformer Lambda
   TransformerSQSEventSourceMapping:
     Type: AWS::Lambda::EventSourceMapping
     Properties:
-      EventSourceArn: !GetAtt SQSQueue.Arn
+      EventSourceArn: !ImportValue 
+        Fn::Sub: "${InfrastructureStackName}-SQSQueueArn"
       FunctionName: !Ref TransformerFunction
       BatchSize: 1
       Enabled: true
@@ -386,26 +368,30 @@ Outputs:
       Name: !Sub "${AWS::StackName}-TransformerFunctionArn"
 
   SQSQueueUrl:
-    Description: URL of the SQS queue for transformer
-    Value: !Ref SQSQueue
+    Description: URL of the SQS queue for transformer (from infrastructure stack)
+    Value: !ImportValue 
+      Fn::Sub: "${InfrastructureStackName}-SQSQueueUrl"
     Export:
       Name: !Sub "${AWS::StackName}-SQSQueueUrl"
 
   SQSQueueArn:
-    Description: ARN of the SQS queue for transformer
-    Value: !GetAtt SQSQueue.Arn
+    Description: ARN of the SQS queue for transformer (from infrastructure stack)
+    Value: !ImportValue 
+      Fn::Sub: "${InfrastructureStackName}-SQSQueueArn"
     Export:
       Name: !Sub "${AWS::StackName}-SQSQueueArn"
 
   SourceQueueUrl:
-    Description: URL of the SQS queue for FTP listener
-    Value: !Ref SourceQueue
+    Description: URL of the SQS queue for FTP listener (from infrastructure stack)
+    Value: !ImportValue 
+      Fn::Sub: "${InfrastructureStackName}-SourceQueueUrl"
     Export:
       Name: !Sub "${AWS::StackName}-SourceQueueUrl"
 
   SourceQueueArn:
-    Description: ARN of the SQS queue for FTP listener
-    Value: !GetAtt SourceQueue.Arn
+    Description: ARN of the SQS queue for FTP listener (from infrastructure stack)
+    Value: !ImportValue 
+      Fn::Sub: "${InfrastructureStackName}-SourceQueueArn"
     Export:
       Name: !Sub "${AWS::StackName}-SourceQueueArn"
 

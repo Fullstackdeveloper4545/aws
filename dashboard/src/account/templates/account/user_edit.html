@@ -38,7 +38,8 @@
                     {% csrf_token %}
                     
                     <div class="row g-3">
-                        <div class="col-md-6">
+                        <!-- First line: Email -->
+                        <div class="col-12">
                             <label for="{{ form.email.id_for_label }}" class="form-label">Email *</label>
                             {{ form.email }}
                             {% if form.email.errors %}
@@ -50,6 +51,7 @@
                             {% endif %}
                         </div>
                         
+                        <!-- Second line: First Name and Last Name -->
                         <div class="col-md-6">
                             <label for="{{ form.first_name.id_for_label }}" class="form-label">First Name</label>
                             {{ form.first_name }}
@@ -74,6 +76,7 @@
                             {% endif %}
                         </div>
                         
+                        <!-- Third line: Status and Permissions -->
                         <div class="col-md-6">
                             <label for="{{ form.is_active.id_for_label }}" class="form-label">Status</label>
                             <div class="form-check">

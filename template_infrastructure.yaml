@@ -270,6 +270,22 @@ Resources:
       RouteTableId: !Ref PrivateRouteTable
       SubnetId: !Ref PrivateSubnet4
 
+  # SQS Queue for FTP Listener (moved from application stack)
+  SourceQueue:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: ftp-listener-queue
+      VisibilityTimeout: 300
+      MessageRetentionPeriod: 1209600  # 14 days
+
+  # SQS Queue for Transformer (moved from application stack)
+  SQSQueue:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: ftp-processing-queue
+      VisibilityTimeout: 300
+      MessageRetentionPeriod: 1209600  # 14 days
+
   # S3 Bucket
   S3Bucket:
     Type: AWS::S3::Bucket
@@ -291,9 +307,36 @@ Resources:
           - Id: DeleteOldFiles
             Status: Enabled
             ExpirationInDays: 365
+      NotificationConfiguration:
+        QueueConfigurations:
+          - Event: s3:ObjectCreated:*
+            Queue: !GetAtt SourceQueue.Arn
+            Filter:
+              S3Key:
+                Rules:
+                  - Name: prefix
+                    Value: uploads/
       Tags:
         - Key: Name
           Value: marium-s3-bucket
+
+  # SQS Queue Policy to allow S3 notifications
+  SourceQueuePolicy:
+    Type: AWS::SQS::QueuePolicy
+    Properties:
+      Queues:
+        - !Ref SourceQueue
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: s3.amazonaws.com
+            Action: sqs:SendMessage
+            Resource: !GetAtt SourceQueue.Arn
+            Condition:
+              ArnLike:
+                aws:SourceArn: !Sub "arn:aws:s3:::${S3BucketName}"
 
   # RDS Security Group
   RDSSecurityGroup:
@@ -552,4 +595,28 @@ Outputs:
     Description: Lambda functions security group ID
     Value: !Ref LambdaSecurityGroup
     Export:
-      Name: !Sub "${AWS::StackName}-LambdaSecurityGroupId" 
+      Name: !Sub "${AWS::StackName}-LambdaSecurityGroupId"
+
+  SourceQueueUrl:
+    Description: URL of the SQS queue for FTP listener
+    Value: !Ref SourceQueue
+    Export:
+      Name: !Sub "${AWS::StackName}-SourceQueueUrl"
+
+  SourceQueueArn:
+    Description: ARN of the SQS queue for FTP listener
+    Value: !GetAtt SourceQueue.Arn
+    Export:
+      Name: !Sub "${AWS::StackName}-SourceQueueArn"
+
+  SQSQueueUrl:
+    Description: URL of the SQS queue for transformer
+    Value: !Ref SQSQueue
+    Export:
+      Name: !Sub "${AWS::StackName}-SQSQueueUrl"
+
+  SQSQueueArn:
+    Description: ARN of the SQS queue for transformer
+    Value: !GetAtt SQSQueue.Arn
+    Export:
+      Name: !Sub "${AWS::StackName}-SQSQueueArn" 

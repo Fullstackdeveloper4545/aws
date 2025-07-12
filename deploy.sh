@@ -284,13 +284,23 @@ deploy_infrastructure_stack() {
         return 1
     fi
     
-    if ! sam deploy --template-file template_infrastructure.yaml \
+    # Deploy infrastructure stack with real-time output
+    print_info "Deploying infrastructure stack..."
+    
+    if sam deploy --template-file template_infrastructure.yaml \
         --stack-name "$INFRASTRUCTURE_STACK_NAME" \
         --profile "$PROFILE" \
         --capabilities CAPABILITY_NAMED_IAM \
         --no-confirm-changeset; then
-        print_error "SAM deploy failed for infrastructure stack"
-        return 1
+        print_success "Infrastructure stack deployment completed successfully"
+    else
+        local deploy_exit_code=$?
+        if [ $deploy_exit_code -eq 0 ]; then
+            print_success "Infrastructure stack deployment completed successfully"
+        else
+            print_error "SAM deploy failed for infrastructure stack"
+            return 1
+        fi
     fi
     
     # Wait for deployment
@@ -358,7 +368,10 @@ deploy_application_stack() {
         return 1
     fi
     
-    if ! sam deploy --template-file template_application.yaml \
+    # Deploy application stack with real-time output
+    print_info "Deploying application stack..."
+    
+    if sam deploy --template-file template_application.yaml \
         --stack-name "$APPLICATION_STACK_NAME" \
         --profile "$PROFILE" \
         --capabilities CAPABILITY_NAMED_IAM \
@@ -367,8 +380,15 @@ deploy_application_stack() {
         InfrastructureStackName="$INFRASTRUCTURE_STACK_NAME" \
         S3BucketName="ftp-files-bucket-9824" \
         SFTPUsername="sftpuser"; then
-        print_error "SAM deploy failed for application stack"
-        return 1
+        print_success "Application stack deployment completed successfully"
+    else
+        local deploy_exit_code=$?
+        if [ $deploy_exit_code -eq 0 ]; then
+            print_success "Application stack deployment completed successfully"
+        else
+            print_error "SAM deploy failed for application stack"
+            return 1
+        fi
     fi
     
     # Wait for deployment
@@ -443,7 +463,7 @@ show_infrastructure_summary() {
     echo ""
     echo "🔗 Next Steps:"
     echo "   - Deploy application stack to add Lambda functions and SFTP server"
-    echo "   - Use option 2 to deploy application stack"
+    echo "   - Use option 3 to deploy application stack"
 }
 
 show_application_summary() {

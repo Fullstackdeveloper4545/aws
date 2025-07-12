@@ -26,7 +26,7 @@ class UserProfile(models.Model):
     @property
     def has_user_management_access(self):
         """Check if user has access to user management"""
-        return self.is_user_admin
+        return self.is_user_admin or self.user.is_superuser
 
 # Signal to create/update profile when user is created/updated
 @receiver(post_save, sender=User)

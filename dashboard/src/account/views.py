@@ -182,7 +182,7 @@ def get_users_data(request):
         for user in queryset:
             # Get user management access status
             try:
-                has_user_access = user.profile.is_user_admin
+                has_user_access = user.profile.has_user_management_access
             except AttributeError:
                 has_user_access = False
             
@@ -244,7 +244,7 @@ def export_users_csv(request):
         for user in queryset:
             # Get user management access status
             try:
-                has_user_access = user.profile.is_user_admin
+                has_user_access = user.profile.has_user_management_access
             except AttributeError:
                 has_user_access = False
             

@@ -32,8 +32,6 @@
                             <i class="bi bi-person-circle"></i> {{ user.email }}
                         </a>
                         <ul class="dropdown-menu dropdown-menu-end">
-                            <li><a class="dropdown-item" href="#"><i class="bi bi-gear"></i> Settings</a></li>
-                            <li><hr class="dropdown-divider"></li>
                             <li><a class="dropdown-item" href="{% url 'account:logout' %}"><i class="bi bi-box-arrow-right"></i> Logout</a></li>
                         </ul>
                     </div>
@@ -67,11 +65,6 @@
                     <a class="nav-link {% if 'account:users' in request.resolver_match.view_name %}active{% endif %}" 
                        href="{% url 'account:users' %}">
                         <i class="bi bi-people"></i> User Management
-                    </a>
-                </li>
-                <li class="nav-item">
-                    <a class="nav-link" href="#">
-                        <i class="bi bi-gear"></i> Configuration
                     </a>
                 </li>
             </ul>

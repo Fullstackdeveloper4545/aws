@@ -1,12 +1,23 @@
 version = 0.1
 
 [default.deploy.parameters]
-stack_name = "ftp-transformer"
+stack_name = "marium-infrastructure"
 resolve_s3 = true
-s3_prefix = "ftp-transformer"
+s3_prefix = "marium-infrastructure"
 region = "us-east-1"
 confirm_changeset = false
 capabilities = "CAPABILITY_NAMED_IAM"
 disable_rollback = true
-parameter_overrides = "FTPHost=\"ftp.example.com\" FTPUsername=\"ftpuser\" FTPDirectory=\"/\" S3BucketName=\"ftp-files-bucket-9824\" SQSQueueName=\"ftp-processing-queue\" FTPListenerFunctionName=\"ftp-listener\" TransformerFunctionName=\"transformer\" ScheduleExpression=\"rate(5 minutes)\""
+parameter_overrides = "S3BucketName=\"ftp-files-bucket-9824\" PGPort=\"5432\" PGDatabase=\"ftp_processor\" PGUsername=\"postgres\" PGPassword=\"sdlkj67hjvfWE0167VBggF\" EC2KeyPairName=\"marium-key\" EC2InstanceType=\"t3.micro\" RDSInstanceType=\"db.t3.micro\" VpcCidr=\"10.0.0.0/16\" PublicSubnet1Cidr=\"10.0.1.0/24\" PublicSubnet2Cidr=\"10.0.2.0/24\" PrivateSubnet1Cidr=\"10.0.3.0/24\" PrivateSubnet2Cidr=\"10.0.4.0/24\" PrivateSubnet3Cidr=\"10.0.5.0/24\" PrivateSubnet4Cidr=\"10.0.6.0/24\""
+image_repositories = []
+
+[application.deploy.parameters]
+stack_name = "marium-application"
+resolve_s3 = true
+s3_prefix = "marium-application"
+region = "us-east-1"
+confirm_changeset = false
+capabilities = "CAPABILITY_NAMED_IAM"
+disable_rollback = true
+parameter_overrides = "SQSQueueName=\"ftp-processing-queue\" SourceQueueName=\"ftp-listener-queue\" SourceFunctionName=\"ftp-listener\" TransformerFunctionName=\"transformer\" PGPort=\"5432\" PGDatabase=\"ftp_processor\" PGUsername=\"postgres\" PGPassword=\"sdlkj67hjvfWE0167VBggF\" APIEndpoint=\"https://trackageadminbackend.ihrailsoftware.com/api/v1/readers/process_reader_data\" SFTPUsername=\"sftpuser\" InfrastructureStackName=\"marium-infrastructure\" S3BucketName=\"ftp-files-bucket-9824\""
 image_repositories = []

@@ -1,37 +1,12 @@
 AWSTemplateFormatVersion: '2010-09-09'
 Transform: AWS::Serverless-2016-10-31
-Description: 'FTP to S3 Lambda Handler with SQS Transformer and SFTP Access'
+Description: 'Infrastructure Stack - VPC, RDS, EC2, S3 (Less frequent changes)'
 
 Parameters:
   S3BucketName:
     Type: String
     Description: S3 bucket name for storing FTP files
     Default: ftp-files-bucket-9824
-  
-  SQSQueueName:
-    Type: String
-    Description: SQS queue name for processing notifications
-    Default: ftp-processing-queue
-  
-  SourceQueueName:
-    Type: String
-    Description: SQS queue name for FTP listener notifications
-    Default: ftp-listener-queue
-  
-  SourceFunctionName:
-    Type: String
-    Description: FTP Listener Lambda function name
-    Default: ftp-listener
-  
-  TransformerFunctionName:
-    Type: String
-    Description: Transformer Lambda function name
-    Default: transformer
-  
-  PGHost:
-    Type: String
-    Description: PostgreSQL database host
-    Default: localhost
   
   PGPort:
     Type: String
@@ -53,11 +28,6 @@ Parameters:
     NoEcho: true
     Description: PostgreSQL database password
     Default: sdlkj67hjvfWE0167VBggF
-
-  APIEndpoint:
-    Type: String
-    Description: API endpoint
-    Default: https://trackageadminbackend.ihrailsoftware.com/api/v1/readers/process_reader_data
 
   EC2KeyPairName:
     Type: AWS::EC2::KeyPair::KeyName
@@ -117,18 +87,6 @@ Parameters:
     Description: CIDR block for private subnet 4 (for Lambda/RDS)
     Default: 10.0.6.0/24
 
-  # SFTP Parameters
-  SFTPUsername:
-    Type: String
-    Description: SFTP username for S3 access
-    Default: sftpuser
-  
-  SFTPPassword:
-    Type: String
-    NoEcho: true
-    Description: SFTP password for S3 access
-    Default: SecurePassword123!
-    
 Resources:
   # Custom VPC
   VPC:
@@ -312,19 +270,6 @@ Resources:
       RouteTableId: !Ref PrivateRouteTable
       SubnetId: !Ref PrivateSubnet4
 
-  # Shared Dependencies Layer
-  SharedDependenciesLayer:
-    Type: AWS::Serverless::LayerVersion
-    Properties:
-      LayerName: shared-python-packages
-      Description: Common Python packages
-      ContentUri: layer/
-      CompatibleRuntimes:
-        - python3.9
-      RetentionPolicy: Retain
-    Metadata:
-      BuildMethod: python3.9
-
   # S3 Bucket
   S3Bucket:
     Type: AWS::S3::Bucket
@@ -346,226 +291,9 @@ Resources:
           - Id: DeleteOldFiles
             Status: Enabled
             ExpirationInDays: 365
-      NotificationConfiguration:
-        QueueConfigurations:
-          - Event: s3:ObjectCreated:*
-            Queue: !GetAtt SourceQueue.Arn
-            Filter:
-              S3Key:
-                Rules:
-                  - Name: prefix
-                    Value: uploads/
-
-  # SQS Queue for Transformer
-  SQSQueue:
-    Type: AWS::SQS::Queue
-    Properties:
-      QueueName: !Ref SQSQueueName
-      VisibilityTimeout: 300
-      MessageRetentionPeriod: 1209600  # 14 days
-
-  # SQS Queue for FTP Listener
-  SourceQueue:
-    Type: AWS::SQS::Queue
-    Properties:
-      QueueName: !Ref SourceQueueName
-      VisibilityTimeout: 300
-      MessageRetentionPeriod: 1209600  # 14 days
-
-  # SQS Queue Policy to allow S3 notifications
-  SourceQueuePolicy:
-    Type: AWS::SQS::QueuePolicy
-    Properties:
-      Queues:
-        - !Ref SourceQueue
-      PolicyDocument:
-        Version: '2012-10-17'
-        Statement:
-          - Effect: Allow
-            Principal:
-              Service: s3.amazonaws.com
-            Action: sqs:SendMessage
-            Resource: !GetAtt SourceQueue.Arn
-            Condition:
-              ArnLike:
-                aws:SourceArn: !Sub "arn:aws:s3:::${S3BucketName}"
-
-  # IAM Role for FTP Listener Lambda
-  SourceExecutionRole:
-    Type: AWS::IAM::Role
-    Properties:
-      AssumeRolePolicyDocument:
-        Version: '2012-10-17'
-        Statement:
-          - Effect: Allow
-            Principal:
-              Service: lambda.amazonaws.com
-            Action: sts:AssumeRole
-      ManagedPolicyArns:
-        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
-        - arn:aws:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole
-      Policies:
-        - PolicyName: SourcePolicy
-          PolicyDocument:
-            Version: '2012-10-17'
-            Statement:
-              - Effect: Allow
-                Action:
-                  - s3:PutObject
-                  - s3:GetObject
-                  - s3:DeleteObject
-                Resource: !Sub "arn:aws:s3:::${S3BucketName}/*"
-              - Effect: Allow
-                Action:
-                  - sqs:SendMessage
-                  - sqs:GetQueueAttributes
-                  - sqs:ReceiveMessage
-                Resource: !GetAtt SQSQueue.Arn
-              - Effect: Allow
-                Action:
-                  - sqs:ReceiveMessage
-                  - sqs:DeleteMessage
-                  - sqs:GetQueueAttributes
-                Resource: !GetAtt SourceQueue.Arn
-
-  # IAM Role for Transformer Lambda
-  TransformerExecutionRole:
-    Type: AWS::IAM::Role
-    Properties:
-      AssumeRolePolicyDocument:
-        Version: '2012-10-17'
-        Statement:
-          - Effect: Allow
-            Principal:
-              Service: lambda.amazonaws.com
-            Action: sts:AssumeRole
-      ManagedPolicyArns:
-        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
-        - arn:aws:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole
-      Policies:
-        - PolicyName: TransformerPolicy
-          PolicyDocument:
-            Version: '2012-10-17'
-            Statement:
-              - Effect: Allow
-                Action:
-                  - s3:PutObject
-                  - s3:GetObject
-                  - s3:DeleteObject
-                Resource: !Sub "arn:aws:s3:::${S3BucketName}/*"
-              - Effect: Allow
-                Action:
-                  - sqs:DeleteMessage
-                  - sqs:GetQueueAttributes
-                  - sqs:ReceiveMessage
-                Resource: !GetAtt SQSQueue.Arn
-
-  # FTP Listener Lambda Function
-  SourceFunction:
-    Type: AWS::Serverless::Function
-    Properties:
-      FunctionName: !Ref SourceFunctionName
-      Runtime: python3.9
-      Handler: lambda_handler.lambda_handler
-      Role: !GetAtt SourceExecutionRole.Arn
-      CodeUri: ./ftp_listener
-      Timeout: 300
-      MemorySize: 512
-      Layers:
-        - !Ref SharedDependenciesLayer
-      Environment:
-        Variables:
-          S3_BUCKET: !Ref S3Bucket
-          SQS_QUEUE_URL: !Ref SQSQueue
-          PG_HOST: !GetAtt RDSInstance.Endpoint.Address
-          PG_PORT: !Ref PGPort
-          PG_DB: !Ref PGDatabase
-          PG_USER: !Ref PGUsername
-          PG_PASSWORD: !Ref PGPassword
-      VpcConfig:
-        SecurityGroupIds:
-          - !Ref LambdaSecurityGroup
-        SubnetIds:
-          - !Ref PrivateSubnet3
-          - !Ref PrivateSubnet4
-
-  # Transformer Lambda Function
-  TransformerFunction:
-    Type: AWS::Serverless::Function
-    Properties:
-      FunctionName: !Ref TransformerFunctionName
-      Runtime: python3.9
-      Handler: lambda_handler.lambda_handler
-      Role: !GetAtt TransformerExecutionRole.Arn
-      CodeUri: ./transformer
-      Timeout: 300
-      MemorySize: 512
-      Layers:
-        - !Ref SharedDependenciesLayer
-      Environment:
-        Variables:
-          S3_BUCKET: !Ref S3Bucket
-          PG_HOST: !GetAtt RDSInstance.Endpoint.Address
-          PG_PORT: !Ref PGPort
-          PG_DB: !Ref PGDatabase
-          PG_USER: !Ref PGUsername
-          PG_PASSWORD: !Ref PGPassword
-          API_ENDPOINT: !Ref APIEndpoint
-      VpcConfig:
-        SecurityGroupIds:
-          - !Ref LambdaSecurityGroup
-        SubnetIds:
-          - !Ref PrivateSubnet3
-          - !Ref PrivateSubnet4
-
-  # SQS Permission for FTP Listener Lambda
-  SourceSQSPermission:
-    Type: AWS::Lambda::Permission
-    Properties:
-      FunctionName: !Ref SourceFunction
-      Action: lambda:InvokeFunction
-      Principal: sqs.amazonaws.com
-      SourceArn: !GetAtt SourceQueue.Arn
-
-  # SQS Event Source Mapping for FTP Listener Lambda
-  SourceSQSEventSourceMapping:
-    Type: AWS::Lambda::EventSourceMapping
-    Properties:
-      EventSourceArn: !GetAtt SourceQueue.Arn
-      FunctionName: !Ref SourceFunction
-      BatchSize: 1
-      Enabled: true
-
-  # SQS Permission for Transformer Lambda
-  TransformerSQSPermission:
-    Type: AWS::Lambda::Permission
-    Properties:
-      FunctionName: !Ref TransformerFunction
-      Action: lambda:InvokeFunction
-      Principal: sqs.amazonaws.com
-      SourceArn: !GetAtt SQSQueue.Arn
-
-  # SQS Event Source Mapping for Transformer Lambda
-  TransformerSQSEventSourceMapping:
-    Type: AWS::Lambda::EventSourceMapping
-    Properties:
-      EventSourceArn: !GetAtt SQSQueue.Arn
-      FunctionName: !Ref TransformerFunction
-      BatchSize: 1
-      Enabled: true
-
-  # CloudWatch Log Groups
-  SourceLogGroup:
-    Type: AWS::Logs::LogGroup
-    Properties:
-      LogGroupName: !Sub "/aws/lambda/${SourceFunctionName}"
-      RetentionInDays: 30
-
-  TransformerLogGroup:
-    Type: AWS::Logs::LogGroup
-    Properties:
-      LogGroupName: !Sub "/aws/lambda/${TransformerFunctionName}"
-      RetentionInDays: 30
+      Tags:
+        - Key: Name
+          Value: marium-s3-bucket
 
   # RDS Security Group
   RDSSecurityGroup:
@@ -729,71 +457,6 @@ Resources:
         - Key: Name
           Value: marium-lambda-sg
 
-  # IAM Role for SFTP Server
-  SFTPExecutionRole:
-    Type: AWS::IAM::Role
-    Properties:
-      AssumeRolePolicyDocument:
-        Version: '2012-10-17'
-        Statement:
-          - Effect: Allow
-            Principal:
-              Service: transfer.amazonaws.com
-            Action: sts:AssumeRole
-      ManagedPolicyArns:
-        - arn:aws:iam::aws:policy/service-role/AWSTransferLoggingAccess
-      Policies:
-        - PolicyName: SFTPPolicy
-          PolicyDocument:
-            Version: '2012-10-17'
-            Statement:
-              - Effect: Allow
-                Action:
-                  - s3:ListBucket
-                  - s3:GetBucketLocation
-                Resource: !Sub "arn:aws:s3:::${S3BucketName}"
-              - Effect: Allow
-                Action:
-                  - s3:ListBucket
-                  - s3:GetBucketLocation
-                Resource: !Sub "arn:aws:s3:::${S3BucketName}"
-              - Effect: Allow
-                Action:
-                  - s3:GetObject
-                  - s3:PutObject
-                  - s3:DeleteObject
-                  - s3:GetObjectVersion
-                  - s3:DeleteObjectVersion
-                Resource: !Sub "arn:aws:s3:::${S3BucketName}/*"
-
-  # SFTP Server
-  SFTPServer:
-    Type: AWS::Transfer::Server
-    Properties:
-      IdentityProviderType: SERVICE_MANAGED
-      LoggingRole: !GetAtt SFTPExecutionRole.Arn
-      EndpointType: PUBLIC
-      Protocols:
-        - SFTP
-      SecurityPolicyName: TransferSecurityPolicy-2024-01
-      Tags:
-        - Key: Name
-          Value: marium-sftp-server
-
-  # SFTP User
-  SFTPUser:
-    Type: AWS::Transfer::User
-    Properties:
-      ServerId: !Ref SFTPServer
-      UserName: !Ref SFTPUsername
-      Role: !GetAtt SFTPExecutionRole.Arn
-      HomeDirectory: !Sub "/${S3BucketName}"
-      HomeDirectoryType: PATH
-      Password: !Ref SFTPPassword
-      Tags:
-        - Key: Name
-          Value: marium-sftp-user
-
 Outputs:
   VPCId:
     Description: VPC ID
@@ -843,47 +506,11 @@ Outputs:
     Export:
       Name: !Sub "${AWS::StackName}-NATGatewayId"
 
-  SourceFunctionArn:
-    Description: ARN of the FTP Listener Lambda function
-    Value: !GetAtt SourceFunction.Arn
-    Export:
-      Name: !Sub "${AWS::StackName}-SourceFunctionArn"
-
-  TransformerFunctionArn:
-    Description: ARN of the Transformer Lambda function
-    Value: !GetAtt TransformerFunction.Arn
-    Export:
-      Name: !Sub "${AWS::StackName}-TransformerFunctionArn"
-
   S3BucketName:
     Description: Name of the S3 bucket
     Value: !Ref S3Bucket
     Export:
       Name: !Sub "${AWS::StackName}-S3BucketName"
-
-  SQSQueueUrl:
-    Description: URL of the SQS queue for transformer
-    Value: !Ref SQSQueue
-    Export:
-      Name: !Sub "${AWS::StackName}-SQSQueueUrl"
-
-  SQSQueueArn:
-    Description: ARN of the SQS queue for transformer
-    Value: !GetAtt SQSQueue.Arn
-    Export:
-      Name: !Sub "${AWS::StackName}-SQSQueueArn"
-
-  SourceQueueUrl:
-    Description: URL of the SQS queue for FTP listener
-    Value: !Ref SourceQueue
-    Export:
-      Name: !Sub "${AWS::StackName}-SourceQueueUrl"
-
-  SourceQueueArn:
-    Description: ARN of the SQS queue for FTP listener
-    Value: !GetAtt SourceQueue.Arn
-    Export:
-      Name: !Sub "${AWS::StackName}-SourceQueueArn"
 
   RDSInstanceEndpoint:
     Description: RDS PostgreSQL endpoint
@@ -925,24 +552,4 @@ Outputs:
     Description: Lambda functions security group ID
     Value: !Ref LambdaSecurityGroup
     Export:
-      Name: !Sub "${AWS::StackName}-LambdaSecurityGroupId"
-
-  SFTPServerEndpoint:
-    Description: SFTP server endpoint
-    Value: !GetAtt SFTPServer.Endpoint
-    Export:
-      Name: !Sub "${AWS::StackName}-SFTPServerEndpoint"
-
-  SFTPServerId:
-    Description: SFTP server ID
-    Value: !Ref SFTPServer
-    Export:
-      Name: !Sub "${AWS::StackName}-SFTPServerId"
-
-  SFTPUsername:
-    Description: SFTP username
-    Value: !Ref SFTPUsername
-    Export:
-      Name: !Sub "${AWS::StackName}-SFTPUsername"
-
- 
+      Name: !Sub "${AWS::StackName}-LambdaSecurityGroupId" 

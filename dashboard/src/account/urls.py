@@ -12,4 +12,7 @@ urlpatterns = [
 
     path('api/users/', views.get_users_data, name='get_users_data'),
     path('api/check-email/', views.check_email_availability, name='check_email'),
-] 
+    
+    # FTP Authentication API endpoints
+    path('api/ftp/auth/', views.ftp_auth_api, name='ftp_auth_api'),
+]

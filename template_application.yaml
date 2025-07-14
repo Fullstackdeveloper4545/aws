@@ -1,6 +1,6 @@
 AWSTemplateFormatVersion: '2010-09-09'
 Transform: AWS::Serverless-2016-10-31
-Description: 'Application Stack - Lambda Functions, SQS, SFTP (More frequent changes)'
+Description: 'Application Stack - Lambda Functions, SQS, SFTP with Custom Authentication (More frequent changes)'
 
 Parameters:
   SQSQueueName:
@@ -22,6 +22,11 @@ Parameters:
     Type: String
     Description: Transformer Lambda function name
     Default: transformer
+
+  AuthFunctionName:
+    Type: String
+    Description: FTP Authentication Lambda function name
+    Default: ftp-auth
   
   PGPort:
     Type: String
@@ -49,18 +54,6 @@ Parameters:
     Description: API endpoint
     Default: https://trackageadminbackend.ihrailsoftware.com/api/v1/readers/process_reader_data
 
-  # SFTP Parameters
-  SFTPUsername:
-    Type: String
-    Description: SFTP username for S3 access
-    Default: sftpuser
-  
-  SFTPPassword:
-    Type: String
-    NoEcho: true
-    Description: SFTP password for S3 access
-    Default: SecurePassword123!
-
   # Infrastructure Stack Parameters (imported from infrastructure stack)
   InfrastructureStackName:
     Type: String
@@ -72,6 +65,13 @@ Parameters:
     Type: String
     Description: S3 bucket name from infrastructure stack
     Default: ftp-files-bucket-9824
+
+  # External Authentication Endpoint Parameter
+  ExternalAuthEndpoint:
+    Type: String
+    Description: External authentication API endpoint URL
+    Default: http://ec2-ip/account/api/ftp/auth/
+
 
 Resources:
   # Shared Dependencies Layer
@@ -86,12 +86,214 @@ Resources:
       RetentionPolicy: Retain
     Metadata:
       BuildMethod: python3.9
+      BuildArchitecture: x86_64
 
-  # Note: SQSQueue is now created in the infrastructure stack
-  # and imported here via cross-stack references
+  # IAM Role for Transfer Family to invoke External API
+  TransferInvocationRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: transfer.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSTransferLoggingAccess
 
-  # Note: SourceQueue is now created in the infrastructure stack
-  # and imported here via cross-stack references
+  # IAM Role for FTP Authentication Lambda
+  AuthExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole
+      Policies:
+        - PolicyName: AuthPolicy
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - logs:CreateLogGroup
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                Resource: '*'
+
+  # FTP Authentication Lambda Function
+  AuthFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Ref AuthFunctionName
+      Runtime: python3.9
+      Handler: lambda_handler.lambda_handler
+      Role: !GetAtt AuthExecutionRole.Arn
+      CodeUri: ./auth_handler
+      Timeout: 30
+      MemorySize: 256
+      Environment:
+        Variables:
+          EC2_AUTH_ENDPOINT: !Ref ExternalAuthEndpoint
+          PG_HOST: !ImportValue 
+            Fn::Sub: "${InfrastructureStackName}-RDSInstanceEndpoint"
+          PG_PORT: !Ref PGPort
+          PG_DB: !Ref PGDatabase
+          PG_USER: !Ref PGUsername
+          PG_PASSWORD: !Ref PGPassword
+      VpcConfig:
+        SecurityGroupIds:
+          - !ImportValue 
+            Fn::Sub: "${InfrastructureStackName}-LambdaSecurityGroupId"
+        SubnetIds:
+          - !ImportValue 
+            Fn::Sub: "${InfrastructureStackName}-PrivateSubnet3Id"
+          - !ImportValue 
+            Fn::Sub: "${InfrastructureStackName}-PrivateSubnet4Id"
+
+  # API Gateway for FTP Authentication
+  AuthApiGateway:
+    Type: AWS::Serverless::Api
+    Properties:
+      Name: ftp-auth-api
+      StageName: prod
+      DefinitionBody:
+        openapi: 3.0.1
+        info:
+          title: FTP Authentication API
+          version: 1.0.0
+        paths:
+          /auth:
+            post:
+              x-amazon-apigateway-integration:
+                uri: !Sub "arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${AuthFunction.Arn}/invocations"
+                passthroughBehavior: when_no_match
+                httpMethod: POST
+                type: aws_proxy
+              responses:
+                '200':
+                  description: Successful authentication
+                '401':
+                  description: Authentication failed
+                '500':
+                  description: Internal server error
+
+  # API Gateway Permission for Lambda
+  AuthApiGatewayPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Ref AuthFunction
+      Action: lambda:InvokeFunction
+      Principal: apigateway.amazonaws.com
+      SourceArn: !Sub "arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${AuthApiGateway}/*/*/auth"
+
+  # FTP Server with API Gateway Identity Provider
+  FTPServer:
+    Type: AWS::Transfer::Server
+    Properties:
+      IdentityProviderType: API_GATEWAY
+      LoggingRole: !GetAtt FTPExecutionRole.Arn
+      EndpointType: VPC
+      Protocols:
+        - FTP
+      SecurityPolicyName: TransferSecurityPolicy-2024-01
+      IdentityProviderDetails:
+        InvocationRole: !GetAtt TransferInvocationRole.Arn
+        Url: !Sub "https://${AuthApiGateway}.execute-api.${AWS::Region}.amazonaws.com/prod/auth"
+      EndpointDetails:
+        VpcId: !ImportValue 
+          Fn::Sub: "${InfrastructureStackName}-VPCId"
+        SubnetIds:
+          - !ImportValue 
+            Fn::Sub: "${InfrastructureStackName}-PublicSubnet1Id"
+          - !ImportValue 
+            Fn::Sub: "${InfrastructureStackName}-PublicSubnet2Id"
+        SecurityGroupIds:
+          - !Ref NLBSecurityGroup
+      Tags:
+        - Key: Name
+          Value: marium-ftp-server
+
+  # Network Load Balancer Security Group
+  NLBSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: "Security group for Network Load Balancer"
+      VpcId: !ImportValue 
+        Fn::Sub: "${InfrastructureStackName}-VPCId"
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 21
+          ToPort: 21
+          CidrIp: 0.0.0.0/0
+        - IpProtocol: tcp
+          FromPort: 1024
+          ToPort: 65535
+          CidrIp: 0.0.0.0/0
+      SecurityGroupEgress:
+        - IpProtocol: -1
+          CidrIp: 0.0.0.0/0
+      Tags:
+        - Key: Name
+          Value: marium-nlb-sg
+
+  # Network Load Balancer
+  NetworkLoadBalancer:
+    Type: AWS::ElasticLoadBalancingV2::LoadBalancer
+    Properties:
+      Type: network
+      Scheme: internet-facing
+      Subnets:
+        - !ImportValue 
+          Fn::Sub: "${InfrastructureStackName}-PublicSubnet1Id"
+        - !ImportValue 
+          Fn::Sub: "${InfrastructureStackName}-PublicSubnet2Id"
+      SecurityGroups:
+        - !Ref NLBSecurityGroup
+      Tags:
+        - Key: Name
+          Value: marium-nlb
+
+
+
+  # IAM Role for FTP Server (Custom Authentication)
+  FTPExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: transfer.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSTransferLoggingAccess
+      Policies:
+        - PolicyName: FTPPolicy
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - s3:ListBucket
+                  - s3:GetBucketLocation
+                Resource: !Sub "arn:aws:s3:::${S3BucketName}"
+              - Effect: Allow
+                Action:
+                  - s3:GetObject
+                  - s3:PutObject
+                  - s3:DeleteObject
+                  - s3:GetObjectVersion
+                  - s3:DeleteObjectVersion
+                Resource: !Sub "arn:aws:s3:::${S3BucketName}/*"
 
   # IAM Role for FTP Listener Lambda
   SourceExecutionRole:
@@ -290,69 +492,11 @@ Resources:
       LogGroupName: !Sub "/aws/lambda/${TransformerFunctionName}"
       RetentionInDays: 30
 
-  # IAM Role for SFTP Server
-  SFTPExecutionRole:
-    Type: AWS::IAM::Role
+  AuthLogGroup:
+    Type: AWS::Logs::LogGroup
     Properties:
-      AssumeRolePolicyDocument:
-        Version: '2012-10-17'
-        Statement:
-          - Effect: Allow
-            Principal:
-              Service: transfer.amazonaws.com
-            Action: sts:AssumeRole
-      ManagedPolicyArns:
-        - arn:aws:iam::aws:policy/service-role/AWSTransferLoggingAccess
-      Policies:
-        - PolicyName: SFTPPolicy
-          PolicyDocument:
-            Version: '2012-10-17'
-            Statement:
-              - Effect: Allow
-                Action:
-                  - s3:ListBucket
-                  - s3:GetBucketLocation
-                Resource: !Sub "arn:aws:s3:::${S3BucketName}"
-              - Effect: Allow
-                Action:
-                  - s3:ListBucket
-                  - s3:GetBucketLocation
-                Resource: !Sub "arn:aws:s3:::${S3BucketName}"
-              - Effect: Allow
-                Action:
-                  - s3:GetObject
-                  - s3:PutObject
-                  - s3:DeleteObject
-                  - s3:GetObjectVersion
-                  - s3:DeleteObjectVersion
-                Resource: !Sub "arn:aws:s3:::${S3BucketName}/*"
-
-  # SFTP Server
-  SFTPServer:
-    Type: AWS::Transfer::Server
-    Properties:
-      IdentityProviderType: SERVICE_MANAGED
-      LoggingRole: !GetAtt SFTPExecutionRole.Arn
-      EndpointType: PUBLIC
-      Protocols:
-        - SFTP
-      SecurityPolicyName: TransferSecurityPolicy-2024-01
-      Tags:
-        - Key: Name
-          Value: marium-sftp-server
-
-  # SFTP User
-  SFTPUser:
-    Type: AWS::Transfer::User
-    Properties:
-      ServerId: !GetAtt SFTPServer.ServerId
-      UserName: !Ref SFTPUsername
-      Role: !GetAtt SFTPExecutionRole.Arn
-      HomeDirectory: !Sub "/${S3BucketName}"
-      HomeDirectoryType: PATH
-      Tags:
-        - Key: Name
-          Value: marium-sftp-user
+      LogGroupName: !Sub "/aws/lambda/${AuthFunctionName}"
+      RetentionInDays: 30
 
 Outputs:
   SourceFunctionArn:
@@ -366,6 +510,18 @@ Outputs:
     Value: !GetAtt TransformerFunction.Arn
     Export:
       Name: !Sub "${AWS::StackName}-TransformerFunctionArn"
+
+  AuthFunctionArn:
+    Description: ARN of the FTP Authentication Lambda function
+    Value: !GetAtt AuthFunction.Arn
+    Export:
+      Name: !Sub "${AWS::StackName}-AuthFunctionArn"
+
+  AuthApiGatewayUrl:
+    Description: URL of the FTP Authentication API Gateway
+    Value: !Sub "https://${AuthApiGateway}.execute-api.${AWS::Region}.amazonaws.com/prod/auth"
+    Export:
+      Name: !Sub "${AWS::StackName}-AuthApiGatewayUrl"
 
   SQSQueueUrl:
     Description: URL of the SQS queue for transformer (from infrastructure stack)
@@ -395,20 +551,24 @@ Outputs:
     Export:
       Name: !Sub "${AWS::StackName}-SourceQueueArn"
 
-  SFTPServerId:
-    Description: SFTP server ID
-    Value: !GetAtt SFTPServer.ServerId
+  FTPServerId:
+    Description: FTP server ID
+    Value: !GetAtt FTPServer.ServerId
     Export:
-      Name: !Sub "${AWS::StackName}-SFTPServerId"
+      Name: !Sub "${AWS::StackName}-FTPServerId"
 
-  SFTPServerEndpoint:
-    Description: SFTP server endpoint
-    Value: !Sub "s-${SFTPServer}.server.transfer.${AWS::Region}.amazonaws.com"
+  FTPServerEndpoint:
+    Description: FTP server endpoint
+    Value: !GetAtt FTPServer.Endpoint
     Export:
-      Name: !Sub "${AWS::StackName}-SFTPServerEndpoint"
+      Name: !Sub "${AWS::StackName}-FTPServerEndpoint"
 
-  SFTPUsername:
-    Description: SFTP username
-    Value: !Ref SFTPUsername
+  NetworkLoadBalancerDnsName:
+    Description: DNS name of the Network Load Balancer for FTP access
+    Value: !GetAtt NetworkLoadBalancer.DNSName
     Export:
-      Name: !Sub "${AWS::StackName}-SFTPUsername" 
+      Name: !Sub "${AWS::StackName}-NetworkLoadBalancerDnsName"
+
+
+
+ 

@@ -316,7 +316,7 @@ deploy_infrastructure_stack() {
         
         print_success "Infrastructure stack deployment completed successfully!"
         show_infrastructure_summary
-        return 0
+    return 0
     else
         print_error "Infrastructure stack deployment failed!"
         return 1
@@ -368,6 +368,19 @@ deploy_application_stack() {
         return 1
     fi
     
+    # Get EC2 Elastic IP for authentication endpoint
+    print_info "Getting EC2 Elastic IP for authentication endpoint..."
+    local ec2_elastic_ip
+    ec2_elastic_ip=$(get_stack_output "$INFRASTRUCTURE_STACK_NAME" "EC2ElasticIP")
+    
+    if [ -z "$ec2_elastic_ip" ]; then
+        print_error "Could not retrieve EC2 Elastic IP from infrastructure stack"
+        return 1
+    fi
+    
+    local auth_endpoint="http://${ec2_elastic_ip}/account/api/ftp/auth/"
+    print_info "Using authentication endpoint: $auth_endpoint"
+    
     # Deploy application stack with real-time output
     print_info "Deploying application stack..."
     
@@ -379,7 +392,7 @@ deploy_application_stack() {
         --parameter-overrides \
         InfrastructureStackName="$INFRASTRUCTURE_STACK_NAME" \
         S3BucketName="ftp-files-bucket-9824" \
-        SFTPUsername="sftpuser"; then
+        ExternalAuthEndpoint="$auth_endpoint"; then
         print_success "Application stack deployment completed successfully"
     else
         local deploy_exit_code=$?
@@ -387,7 +400,7 @@ deploy_application_stack() {
             print_success "Application stack deployment completed successfully"
         else
             print_error "SAM deploy failed for application stack"
-            return 1
+        return 1
         fi
     fi
     
@@ -469,25 +482,42 @@ show_infrastructure_summary() {
 show_application_summary() {
     print_info "Getting application deployment summary..."
     
-    local sftp_endpoint
-    local sftp_username
+    local ftp_endpoint
+    local ec2_elastic_ip
+    local auth_endpoint
     
-    sftp_endpoint=$(get_stack_output "$APPLICATION_STACK_NAME" "SFTPServerEndpoint")
-    sftp_username=$(get_stack_output "$APPLICATION_STACK_NAME" "SFTPUsername")
+    ftp_endpoint=$(get_stack_output "$APPLICATION_STACK_NAME" "FTPServerEndpoint")
+    ec2_elastic_ip=$(get_stack_output "$INFRASTRUCTURE_STACK_NAME" "EC2ElasticIP")
+    
+    if [ -n "$ec2_elastic_ip" ]; then
+        auth_endpoint="http://${ec2_elastic_ip}/account/api/ftp/auth/"
+    else
+        auth_endpoint="http://ec2-ip/account/api/ftp/auth/"
+    fi
     
     echo ""
     print_success "Application stack is ready!"
     echo "📋 Application Details:"
-    echo "   SFTP Server Endpoint: $sftp_endpoint"
-    echo "   SFTP Username: $sftp_username"
-    echo "   SFTP Password: SecurePassword123!"
-    echo "   SFTP Port: 22"
+    echo "   FTP Server Endpoint: $ftp_endpoint"
+    echo "   Authentication Endpoint: $auth_endpoint"
+    echo "   FTP Username: Use database username"
+    echo "   FTP Password: Use database password"
+    echo "   FTP Port: 21"
     echo ""
-    echo "🔗 You can now connect to your S3 bucket via SFTP using any SFTP client:"
-    echo "   Host: $sftp_endpoint"
-    echo "   Username: $sftp_username"
-    echo "   Password: SecurePassword123!"
-    echo "   Port: 22"
+    echo "🔗 You can now connect to your S3 bucket via FTP using any FTP client:"
+    echo "   Host: $ftp_endpoint"
+    echo "   Username: Use username from database"
+    echo "   Password: Use password from database"
+    echo "   Port: 21"
+    echo ""
+    echo "🔗 Authentication API:"
+    echo "   Endpoint: $auth_endpoint"
+    echo "   Method: POST"
+    echo "   Content-Type: application/json"
+    echo ""
+    echo "📝 Note: Username and password are stored in your PostgreSQL database."
+    echo "   Check the database for available users:"
+    echo "   SELECT username, password_hash FROM ftp_users WHERE is_active = TRUE;"
 }
 
 show_full_deployment_summary() {
@@ -496,14 +526,19 @@ show_full_deployment_summary() {
     local rds_endpoint
     local ec2_elastic_ip
     local s3_bucket_name
-    local sftp_endpoint
-    local sftp_username
+    local ftp_endpoint
+    local auth_endpoint
     
     rds_endpoint=$(get_stack_output "$INFRASTRUCTURE_STACK_NAME" "RDSInstanceEndpoint")
     ec2_elastic_ip=$(get_stack_output "$INFRASTRUCTURE_STACK_NAME" "EC2ElasticIP")
     s3_bucket_name=$(get_stack_output "$INFRASTRUCTURE_STACK_NAME" "S3BucketName")
-    sftp_endpoint=$(get_stack_output "$APPLICATION_STACK_NAME" "SFTPServerEndpoint")
-    sftp_username=$(get_stack_output "$APPLICATION_STACK_NAME" "SFTPUsername")
+    ftp_endpoint=$(get_stack_output "$APPLICATION_STACK_NAME" "FTPServerEndpoint")
+    
+    if [ -n "$ec2_elastic_ip" ]; then
+        auth_endpoint="http://${ec2_elastic_ip}/account/api/ftp/auth/"
+    else
+        auth_endpoint="http://ec2-ip/account/api/ftp/auth/"
+    fi
     
     echo ""
     print_success "Full deployment completed successfully!"
@@ -517,16 +552,22 @@ show_full_deployment_summary() {
     echo "   S3 Bucket: $s3_bucket_name"
     echo ""
     echo "🔗 Application Components:"
-    echo "   SFTP Server Endpoint: $sftp_endpoint"
-    echo "   SFTP Username: $sftp_username"
-    echo "   SFTP Password: Auto-generated by AWS"
+    echo "   FTP Server Endpoint: $ftp_endpoint"
+    echo "   Authentication Endpoint: $auth_endpoint"
+    echo "   FTP Username: Use database username"
+    echo "   FTP Password: Use database password"
     echo ""
     echo "🔗 Connection Details:"
-    echo "   SFTP: $sftp_endpoint (port 22)"
+    echo "   FTP: $ftp_endpoint (port 21)"
     echo "   SSH: ssh -i $KEY_NAME.pem ubuntu@$ec2_elastic_ip"
     echo "   RDS: $rds_endpoint:5432"
     echo ""
-    echo "📝 Note: SFTP password is auto-generated by AWS. Check the AWS Transfer Family console to get the password."
+    echo "🔗 Authentication API:"
+    echo "   Endpoint: $auth_endpoint"
+    echo "   Method: POST"
+    echo "   Content-Type: application/json"
+    echo ""
+    echo "📝 Note: FTP password is stored in your PostgreSQL database. Use the password from the database for authentication."
 }
 
 # =============================================================================
@@ -553,6 +594,139 @@ validate_templates() {
     print_success "✅ All template validations completed!"
     print_info "Templates are ready for deployment."
     return 0
+}
+
+# =============================================================================
+# Debug Functions
+# =============================================================================
+
+debug_transfer_server() {
+    print_info "Debugging Transfer Family server..."
+    
+    if ! is_stack_stable "$APPLICATION_STACK_NAME"; then
+        print_error "Application stack does not exist or is not stable"
+        return 1
+    fi
+    
+    local sftp_server_id
+    sftp_server_id=$(get_stack_output "$APPLICATION_STACK_NAME" "SFTPServerId")
+    
+    if [ -z "$sftp_server_id" ]; then
+        print_error "Could not retrieve SFTP server ID"
+        return 1
+    fi
+    
+    print_info "Server ID: $sftp_server_id"
+    echo ""
+    
+    # Get server details
+    print_info "Getting server details..."
+    if aws transfer describe-server \
+        --server-id "$sftp_server_id" \
+        --profile "$PROFILE" \
+        --region "$REGION" \
+        --output table; then
+        print_success "Server details retrieved"
+    else
+        print_error "Failed to get server details"
+        return 1
+    fi
+    
+    echo ""
+    
+    # Check server state
+    print_info "Checking server state..."
+    local server_state
+    server_state=$(aws transfer describe-server \
+        --server-id "$sftp_server_id" \
+        --profile "$PROFILE" \
+        --region "$REGION" \
+        --query 'Server.State' \
+        --output text 2>/dev/null)
+    
+    if [ $? -eq 0 ]; then
+        print_info "Server state: $server_state"
+        
+        if [ "$server_state" != "ONLINE" ]; then
+            print_warning "Server is not ONLINE. Current state: $server_state"
+            print_info "Server must be ONLINE to list users"
+        fi
+    else
+        print_error "Failed to get server state"
+    fi
+    
+    echo ""
+    
+    # Try to list users with detailed output
+    print_info "Attempting to list users..."
+    local users_response
+    users_response=$(aws transfer list-users \
+        --server-id "$sftp_server_id" \
+        --profile "$PROFILE" \
+        --region "$REGION" \
+        --output json 2>&1)
+    
+    if [ $? -eq 0 ]; then
+        print_success "Users list command succeeded"
+        echo "Users response:"
+        echo "$users_response" | jq '.' 2>/dev/null || echo "$users_response"
+    else
+        print_error "Users list command failed"
+        echo "Error response:"
+        echo "$users_response"
+    fi
+}
+
+# =============================================================================
+# Database User Management
+# =============================================================================
+
+show_database_users() {
+    print_info "Getting database users..."
+    
+    if ! is_stack_stable "$INFRASTRUCTURE_STACK_NAME"; then
+        print_error "Infrastructure stack does not exist or is not stable"
+        return 1
+    fi
+    
+    local rds_endpoint
+    rds_endpoint=$(get_stack_output "$INFRASTRUCTURE_STACK_NAME" "RDSInstanceEndpoint")
+    
+    if [ -z "$rds_endpoint" ]; then
+        print_error "Could not retrieve RDS endpoint"
+        return 1
+    fi
+    
+    print_info "RDS Endpoint: $rds_endpoint"
+    echo ""
+    
+    # Check if psql is available
+    if ! command -v psql &> /dev/null; then
+        print_error "psql is not installed or not in PATH"
+        print_info "Please install PostgreSQL client tools"
+        return 1
+    fi
+    
+    # Try to connect and query users
+    print_info "Querying database users..."
+    echo ""
+    
+    if PGPASSWORD="sdlkj67hjvfWE0167VBggF" psql -h "$rds_endpoint" -U postgres -d ftp_processor -c "SELECT username, password_hash, home_directory, is_active FROM ftp_users ORDER BY username;" 2>/dev/null; then
+        print_success "Database users retrieved successfully"
+        echo ""
+        print_info "To add a new user, run:"
+        echo "   INSERT INTO ftp_users (username, password_hash, home_directory, role_arn) VALUES"
+        echo "   ('newuser', 'password123', '/newuser', 'arn:aws:iam::aws:policy/AWSTransferConsoleFullAccess');"
+    else
+        print_error "Failed to query database users"
+        print_info "This might be because:"
+        echo "   1. Database is not accessible from this machine"
+        echo "   2. Security groups are blocking access"
+        echo "   3. Database credentials are incorrect"
+        echo ""
+        print_info "You can connect manually using:"
+        echo "   PGPASSWORD='sdlkj67hjvfWE0167VBggF' psql -h $rds_endpoint -U postgres -d ftp_processor"
+    fi
 }
 
 # =============================================================================
@@ -596,33 +770,43 @@ display_all_stack_status() {
     display_stack_status "$APPLICATION_STACK_NAME"
 }
 
-display_sftp_details() {
-    print_info "Getting SFTP details..."
+display_ftp_details() {
+    print_info "Getting FTP details..."
     
     if ! is_stack_stable "$APPLICATION_STACK_NAME"; then
         print_error "Application stack does not exist or is not stable"
         return 1
     fi
     
-    local sftp_endpoint
-    local sftp_username
+    local ftp_endpoint
+    local ec2_elastic_ip
+    local auth_api_url
     
-    sftp_endpoint=$(get_stack_output "$APPLICATION_STACK_NAME" "SFTPServerEndpoint")
-    sftp_username=$(get_stack_output "$APPLICATION_STACK_NAME" "SFTPUsername")
+    ftp_endpoint=$(get_stack_output "$APPLICATION_STACK_NAME" "FTPServerEndpoint")
+    ec2_elastic_ip=$(get_stack_output "$INFRASTRUCTURE_STACK_NAME" "EC2ElasticIP")
+    auth_api_url=$(get_stack_output "$APPLICATION_STACK_NAME" "AuthApiGatewayUrl")
     
-    print_success "SFTP Details:"
-    echo "   Server Endpoint: $sftp_endpoint"
-    echo "   Username: $sftp_username"
-    echo "   Password: Auto-generated by AWS (check AWS Console)"
-    echo "   Port: 22"
+    print_success "FTP Details:"
+    echo "   Server Endpoint: $ftp_endpoint"
+    echo "   Identity Provider: API_GATEWAY"
+    echo "   Authentication API: $auth_api_url"
+    echo "   Username: Use database username"
+    echo "   Password: Use database password"
+    echo "   Port: 21"
     echo ""
     echo "🔗 Connection Details:"
-    echo "   Host: $sftp_endpoint"
-    echo "   Username: $sftp_username"
-    echo "   Password: Check AWS Transfer Family console for auto-generated password"
-    echo "   Port: 22"
+    echo "   Host: $ftp_endpoint"
+    echo "   Username: Use username from database"
+    echo "   Password: Use password from database"
+    echo "   Port: 21"
     echo ""
-    echo "📝 Note: Password is auto-generated by AWS. Check the AWS Transfer Family console to get the password."
+    echo "🔗 User Management:"
+    echo "   Dashboard: http://${ec2_elastic_ip}/account/"
+    echo "   Django API: http://${ec2_elastic_ip}/account/api/ftp/auth/"
+    echo ""
+    echo "📝 Note: Username and password are stored in your PostgreSQL database."
+    echo "   Check the database for available users:"
+    echo "   SELECT username, password_hash FROM ftp_users WHERE is_active = TRUE;"
 }
 
 display_rds_details() {
@@ -695,6 +879,46 @@ display_s3_details() {
     echo "   Download file: aws s3 cp s3://$s3_bucket_name/<file> . --profile $PROFILE"
 }
 
+display_transfer_family_details() {
+    print_info "Getting Transfer Family details..."
+    
+    if ! is_stack_stable "$APPLICATION_STACK_NAME"; then
+        print_error "Application stack does not exist or is not stable"
+        return 1
+    fi
+    
+    local sftp_endpoint
+    local sftp_username
+    local sftp_server_id
+    
+    sftp_endpoint=$(get_stack_output "$APPLICATION_STACK_NAME" "SFTPServerEndpoint")
+    sftp_username=$(get_stack_output "$APPLICATION_STACK_NAME" "SFTPUsername")
+    sftp_server_id=$(get_stack_output "$APPLICATION_STACK_NAME" "SFTPServerId")
+    
+    print_success "Transfer Family Details:"
+    echo "   Server ID: $sftp_server_id"
+    echo "   Server Endpoint: $sftp_endpoint"
+    echo "   Username: $sftp_username"
+    echo "   Protocol: SFTP"
+    echo "   Port: 22"
+    echo "   Identity Provider: SERVICE_MANAGED"
+    echo ""
+    echo "🔗 Connection Details:"
+    echo "   Host: $sftp_endpoint"
+    echo "   Username: $sftp_username"
+    echo "   Password: Auto-generated by AWS"
+    echo "   Port: 22"
+    echo ""
+    echo "🔗 AWS CLI Commands:"
+    echo "   List users: aws transfer list-users --server-id $sftp_server_id --profile $PROFILE"
+    echo "   Get user details: aws transfer describe-user --server-id $sftp_server_id --user-name $sftp_username --profile $PROFILE"
+    echo "   List servers: aws transfer list-servers --profile $PROFILE"
+    echo "   Get server details: aws transfer describe-server --server-id $sftp_server_id --profile $PROFILE"
+    echo ""
+    echo "📝 Note: Password is auto-generated by AWS. Check the AWS Transfer Family console to get the password."
+    echo "   AWS Console: https://console.aws.amazon.com/transfer/home?region=$REGION"
+}
+
 # =============================================================================
 # Menu System
 # =============================================================================
@@ -707,18 +931,20 @@ show_menu() {
     echo "3. Deploy Application Stack Only"
     echo "4. Validate Templates"
     echo "5. Get All Stack Status"
-    echo "6. Get SFTP Details"
+    echo "6. Get FTP Details"
     echo "7. Get RDS Details"
     echo "8. Get EC2 Details"
     echo "9. Get S3 Details"
-    echo "10. Exit"
+    echo "10. Get Transfer Family Details"
+    echo "11. Show Database Users"
+    echo "12. Exit"
     echo ""
 }
 
 main_menu() {
     while true; do
         show_menu
-        read -p "Select an option (1-10): " choice
+        read -p "Select an option (1-12): " choice
         echo ""
         
         case $choice in
@@ -738,7 +964,7 @@ main_menu() {
                 display_all_stack_status
                 ;;
             6)
-                display_sftp_details
+                display_ftp_details
                 ;;
             7)
                 display_rds_details
@@ -750,11 +976,17 @@ main_menu() {
                 display_s3_details
                 ;;
             10)
+                display_transfer_family_details
+                ;;
+            11)
+                show_database_users
+                ;;
+            12)
                 echo "Goodbye!"
                 exit 0
                 ;;
             *)
-                print_error "Invalid option. Please select 1-10."
+                print_error "Invalid option. Please select 1-12."
                 ;;
         esac
         

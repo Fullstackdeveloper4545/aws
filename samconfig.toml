@@ -19,5 +19,5 @@ region = "us-east-1"
 confirm_changeset = false
 capabilities = "CAPABILITY_NAMED_IAM"
 disable_rollback = true
-parameter_overrides = "SQSQueueName=\"ftp-processing-queue\" SourceQueueName=\"ftp-listener-queue\" SourceFunctionName=\"ftp-listener\" TransformerFunctionName=\"transformer\" PGPort=\"5432\" PGDatabase=\"ftp_processor\" PGUsername=\"postgres\" PGPassword=\"sdlkj67hjvfWE0167VBggF\" APIEndpoint=\"https://trackageadminbackend.ihrailsoftware.com/api/v1/readers/process_reader_data\" SFTPUsername=\"sftpuser\" InfrastructureStackName=\"marium-infrastructure\" S3BucketName=\"ftp-files-bucket-9824\""
+parameter_overrides = "SQSQueueName=\"ftp-processing-queue\" SourceQueueName=\"ftp-listener-queue\" SourceFunctionName=\"ftp-listener\" TransformerFunctionName=\"transformer\" AuthFunctionName=\"ftp-auth\" PGPort=\"5432\" PGDatabase=\"ftp_processor\" PGUsername=\"postgres\" PGPassword=\"sdlkj67hjvfWE0167VBggF\" APIEndpoint=\"https://trackageadminbackend.ihrailsoftware.com/api/v1/readers/process_reader_data\" InfrastructureStackName=\"marium-infrastructure\" S3BucketName=\"ftp-files-bucket-9824\" ExternalAuthEndpoint=\"http://ec2-ip/account/api/ftp/auth/\""
 image_repositories = []

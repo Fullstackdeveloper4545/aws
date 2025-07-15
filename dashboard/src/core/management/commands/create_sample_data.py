@@ -43,13 +43,13 @@ class Command(BaseCommand):
             'marketing_data.csv'
         ]
         
-        # Sample S3 locations
-        sample_s3_locations = [
-            's3://bucket-name/data/customer_data_2024.csv',
-            's3://bucket-name/reports/sales_report_q1.xlsx',
-            's3://bucket-name/inventory/inventory_update.json',
-            's3://bucket-name/analytics/user_analytics.csv',
-            's3://bucket-name/finance/financial_data_2024.xlsx'
+        # Sample locations
+        sample_locations = [
+            'ftp://ftp-server.com/data/customer_data_2024.csv',
+            'ftp://ftp-server.com/reports/sales_report_q1.xlsx',
+            'ftp://ftp-server.com/inventory/inventory_update.json',
+            'ftp://ftp-server.com/analytics/user_analytics.csv',
+            'ftp://ftp-server.com/finance/financial_data_2024.xlsx'
         ]
         
         # Sample statuses
@@ -59,7 +59,7 @@ class Command(BaseCommand):
         for i in range(num_processes):
             process = FileProcess.objects.create(
                 filename=random.choice(sample_filenames),
-                s3_location=random.choice(sample_s3_locations) if random.random() > 0.3 else None,
+                location=random.choice(sample_locations) if random.random() > 0.3 else None,
                 status=random.choice(statuses),
                 created_at=timezone.now() - timedelta(
                     days=random.randint(0, 30),

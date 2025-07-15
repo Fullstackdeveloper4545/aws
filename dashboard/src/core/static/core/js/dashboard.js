@@ -47,7 +47,7 @@ $(document).ready(function() {
                         return '<span class="badge ' + badgeClass + '">' + data + '</span>';
                     }
                 },
-                { data: 's3_location', name: 's3_location' },
+                { data: 'location', name: 'location' },
                 { data: 'created_at', name: 'created_at' },
                 { data: 'updated_at', name: 'updated_at' },
                 { 
@@ -95,7 +95,7 @@ $(document).ready(function() {
                     searchable: true
                 },
                 {
-                    targets: [4], // S3 Location column
+                    targets: [4], // Location column
                     width: '200px',
                     className: 'text-truncate'
                 },
@@ -188,33 +188,6 @@ $(document).ready(function() {
     }).on('mouseleave', 'tr', function() {
         $(this).removeClass('table-hover');
     });
-});
-
-// Direct file upload functions
-function triggerFileUpload() {  
-    // Trigger the hidden file input
-    document.getElementById('fileInput').click();
-}
-
-// Auto-submit form when file is selected
-document.addEventListener('DOMContentLoaded', function() {
-    const fileInput = document.getElementById('fileInput');
-    const uploadBtn = document.getElementById('uploadBtn');
-    const uploadForm = document.getElementById('uploadForm');
-    
-    if (fileInput) {
-        fileInput.addEventListener('change', function(e) {
-            if (e.target.files.length > 0) {
-                // Show loading state
-                uploadBtn.classList.add('btn-upload-loading');
-                uploadBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>Uploading...';
-                uploadBtn.disabled = true;
-                
-                // Auto-submit the form
-                uploadForm.submit();
-            }
-        });
-    }
 });
 
 // Export to CSV function with current filters

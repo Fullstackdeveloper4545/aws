@@ -1,5 +1,5 @@
 from django.contrib import admin
-from .models import FileProcess, ApiCall
+from .models import FileProcess, ApiCall, EmailConfig
 
 @admin.register(FileProcess)
 class FileProcessAdmin(admin.ModelAdmin):
@@ -21,3 +21,21 @@ class ApiCallAdmin(admin.ModelAdmin):
         return obj.is_successful
     is_successful.boolean = True
     is_successful.short_description = 'Successful'
+
+@admin.register(EmailConfig)
+class EmailConfigAdmin(admin.ModelAdmin):
+    list_display = ('email', 'created_at', 'updated_at')
+    list_filter = ('created_at',)
+    search_fields = ('email',)
+    readonly_fields = ('created_at', 'updated_at')
+    ordering = ('-created_at',)
+    
+    fieldsets = (
+        ('Email Information', {
+            'fields': ('email',)
+        }),
+        ('Timestamps', {
+            'fields': ('created_at', 'updated_at'),
+            'classes': ('collapse',)
+        }),
+    )

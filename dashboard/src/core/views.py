@@ -6,46 +6,16 @@ from django.http import JsonResponse, HttpResponse
 from django.db.models import Q
 from django.urls import reverse
 from datetime import datetime
-import boto3
-import os
-import uuid
 import csv
-from .models import FileProcess, ApiCall
-
-def get_s3_client():
-    """Helper function to create S3 client using Django settings"""
-    return boto3.client(
-        's3',
-        aws_access_key_id=settings.AWS_ACCESS_KEY_ID,
-        aws_secret_access_key=settings.AWS_SECRET_ACCESS_KEY,
-        region_name=settings.AWS_S3_REGION_NAME
-    )
+from .models import FileProcess, ApiCall, EmailConfig
+from account.mixins import UserManagementAccessMixin
+from django.contrib.auth.mixins import LoginRequiredMixin
+from django.views.generic import ListView, CreateView, UpdateView, DeleteView
+from django.urls import reverse_lazy
 
 @login_required
 def dashboard_home(request):
     """Dashboard home view showing file processes with statistics"""
-    if request.method == 'POST':
-        uploaded_file = request.FILES.get('file')
-        
-        if not uploaded_file:
-            messages.error(request, 'Please select a file to upload.')
-        else:
-            try:
-                # Initialize S3 client using settings
-                s3_client = get_s3_client()
-                
-                # Upload to S3 using settings
-                bucket_name = settings.AWS_STORAGE_BUCKET_NAME
-                s3_key = f"{settings.AWS_BUCKET_FOLDER}/{uploaded_file.name}"
-                
-                s3_client.upload_fileobj(
-                    uploaded_file,
-                    bucket_name,
-                    s3_key
-                )
-            except Exception as e:
-                messages.error(request, f'Error uploading file: {str(e)}')
-                return redirect('core:dashboard_home')
     
     # Get statistics for cards
     total_processes = FileProcess.objects.count()
@@ -134,7 +104,7 @@ def get_processes_data(request):
             queryset = queryset.filter(
                 Q(filename__icontains=search_value) |
                 Q(site_id__icontains=search_value) |
-                Q(s3_location__icontains=search_value) |
+                Q(location__icontains=search_value) |
                 Q(status__icontains=search_value)
             )
         
@@ -154,7 +124,7 @@ def get_processes_data(request):
                 'id': str(process.unique_id)[:8],
                 'filename': process.filename,
                 'status': process.status,
-                's3_location': process.s3_location or '-',
+                'location': process.location or '-',
                 'created_at': process.created_at.strftime('%b %d, %Y %H:%M'),
                 'updated_at': process.updated_at.strftime('%b %d, %Y %H:%M'),
                 'site_id': process.site_id or '-',
@@ -219,7 +189,7 @@ def export_processes_csv(request):
         
         writer = csv.writer(response)
         writer.writerow([
-            'ID', 'Site ID', 'Filename', 'Status', 'S3 Location', 
+            'ID', 'Site ID', 'Filename', 'Status', 'Location', 
             'Created At', 'Updated At', 'Error Message'
         ])
         
@@ -229,7 +199,7 @@ def export_processes_csv(request):
                 process.site_id or '',
                 process.filename,
                 process.status,
-                process.s3_location or '',
+                process.location or '',
                 process.created_at.strftime('%Y-%m-%d %H:%M:%S'),
                 process.updated_at.strftime('%Y-%m-%d %H:%M:%S'),
                 process.error_message or ''
@@ -239,3 +209,70 @@ def export_processes_csv(request):
         
     except Exception as e:
         return JsonResponse({'error': str(e)}, status=500)
+
+class EmailConfigListView(LoginRequiredMixin, UserManagementAccessMixin, ListView):
+    """List all email configurations"""
+    model = EmailConfig
+    template_name = 'core/email_config_list.html'
+    context_object_name = 'email_configs'
+    ordering = ['-created_at']
+
+class EmailConfigCreateView(LoginRequiredMixin, UserManagementAccessMixin, CreateView):
+    """Add a new email configuration"""
+    model = EmailConfig
+    template_name = 'core/email_config_form.html'
+    fields = ['email']
+    success_url = reverse_lazy('core:email_config_list')
+    
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context['action'] = 'Add'
+        return context
+    
+    def form_valid(self, form):
+        # Check if email already exists
+        if EmailConfig.objects.filter(email=form.cleaned_data['email']).exists():
+            messages.error(self.request, 'This email address is already configured.')
+            return self.form_invalid(form)
+        
+        messages.success(self.request, 'Email configuration added successfully.')
+        return super().form_valid(form)
+    
+    def form_invalid(self, form):
+        messages.error(self.request, 'Please correct the errors below.')
+        return super().form_invalid(form)
+
+class EmailConfigUpdateView(LoginRequiredMixin, UserManagementAccessMixin, UpdateView):
+    """Edit an existing email configuration"""
+    model = EmailConfig
+    template_name = 'core/email_config_form.html'
+    fields = ['email']
+    success_url = reverse_lazy('core:email_config_list')
+    
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context['action'] = 'Edit'
+        return context
+    
+    def form_valid(self, form):
+        # Check if email already exists (excluding current record)
+        if EmailConfig.objects.filter(email=form.cleaned_data['email']).exclude(id=self.object.id).exists():
+            messages.error(self.request, 'This email address is already configured.')
+            return self.form_invalid(form)
+        
+        messages.success(self.request, 'Email configuration updated successfully.')
+        return super().form_valid(form)
+    
+    def form_invalid(self, form):
+        messages.error(self.request, 'Please correct the errors below.')
+        return super().form_invalid(form)
+
+class EmailConfigDeleteView(LoginRequiredMixin, UserManagementAccessMixin, DeleteView):
+    """Delete an email configuration"""
+    model = EmailConfig
+    template_name = 'core/email_config_confirm_delete.html'
+    success_url = reverse_lazy('core:email_config_list')
+    
+    def delete(self, request, *args, **kwargs):
+        messages.success(request, 'Email configuration deleted successfully.')
+        return super().delete(request, *args, **kwargs)

@@ -145,17 +145,8 @@
 
 <!-- File Processes Table -->
 <div class="card shadow mb-4">
-    <div class="card-header py-3 d-flex justify-content-between align-items-center">
+    <div class="card-header py-3">
         <h6 class="m-0 font-weight-bold text-primary">File Processes</h6>
-        <div class="upload-btn-wrapper">
-            <form method="POST" action="{% url 'core:dashboard_home' %}" enctype="multipart/form-data" id="uploadForm" style="display: none;">
-                {% csrf_token %}
-                <input type="file" id="fileInput" name="file" accept="*/*" required>
-            </form>
-            <button type="button" class="btn btn-primary btn-sm" id="uploadBtn" onclick="triggerFileUpload()">
-                <i class="bi bi-cloud-upload me-2"></i>Upload File
-            </button>
-        </div>
     </div>
     <div class="card-body">
         <div class="table-responsive">
@@ -166,7 +157,7 @@
                         <th>Site ID</th>
                         <th>Filename</th>
                         <th>Status</th>
-                        <th>S3 Location</th>
+                        <th>Location</th>
                         <th>Created</th>
                         <th>Updated</th>
                         <th>Actions</th>

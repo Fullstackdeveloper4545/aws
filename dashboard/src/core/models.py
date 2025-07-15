@@ -17,7 +17,7 @@ class FileProcess(models.Model):
     unique_id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     site_id = models.CharField(max_length=255, null=True, blank=True)
     filename = models.CharField(max_length=255)
-    s3_location = models.CharField(max_length=500, null=True, blank=True)
+    location = models.CharField(max_length=500, null=True, blank=True)
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='Pending')
     error_message = models.TextField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
@@ -68,3 +68,19 @@ class ApiCall(models.Model):
     def has_error(self):
         """Check if the API call had an error"""
         return self.error_message is not None or self.api_status == 0
+
+class EmailConfig(models.Model):
+    """Model for storing email configuration"""
+    
+    email = models.EmailField(unique=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    
+    class Meta:
+        db_table = 'email_configs'
+        verbose_name = 'Email Configuration'
+        verbose_name_plural = 'Email Configurations'
+        ordering = ['-created_at']
+    
+    def __str__(self):
+        return f"{self.email}"

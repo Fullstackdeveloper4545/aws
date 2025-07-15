@@ -62,6 +62,12 @@
                     </a>
                 </li>
                 <li class="nav-item">
+                    <a class="nav-link {% if 'email_config' in request.resolver_match.url_name %}active{% endif %}" 
+                       href="{% url 'core:email_config_list' %}">
+                        <i class="bi bi-envelope"></i> Email Configuration
+                    </a>
+                </li>
+                <li class="nav-item">
                     <a class="nav-link {% if 'account:users' in request.resolver_match.view_name %}active{% endif %}" 
                        href="{% url 'account:users' %}">
                         <i class="bi bi-people"></i> User Management

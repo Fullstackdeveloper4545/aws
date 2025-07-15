@@ -2,6 +2,9 @@ import os
 import psycopg2
 from psycopg2.extras import RealDictCursor
 import json
+import logging
+
+logger = logging.getLogger()
 
 class DBManager:
     @staticmethod
@@ -26,19 +29,35 @@ class DBManager:
                 else:
                     full_query = query
                     all_values = values
-                
+                logger.info(f"Executing query: {full_query} with values: {all_values}")
                 cur.execute(full_query, all_values)
         finally:
             conn.close()
 
     @staticmethod
-    def insert_process(unique_id, filename, s3_location, status):
+    def get_recipient_emails():
+        """Get list of recipient emails from email_configs table"""
+        try:
+            conn = DBManager.get_connection()
+            with conn.cursor() as cur:
+                query = "SELECT email FROM email_configs WHERE email IS NOT NULL"
+                cur.execute(query)
+                results = cur.fetchall()
+                return [row[0] for row in results]
+        except Exception as e:
+            logger.error(f"Error getting emails from database: {str(e)}")
+            return []
+        finally:
+            conn.close()
+
+    @staticmethod
+    def insert_process(unique_id, filename, location, status):
         query = """
-            INSERT INTO file_processes (unique_id, filename, s3_location, status, created_at, updated_at)
+            INSERT INTO file_processes (unique_id, filename, location, status, created_at, updated_at)
             VALUES (%s, %s, %s, %s, NOW(), NOW())
             ON CONFLICT (unique_id) DO NOTHING;
         """
-        values = (unique_id, filename, s3_location, status)
+        values = (unique_id, filename, location, status)
         DBManager.execute_query(query, values)
 
     @staticmethod
@@ -56,9 +75,9 @@ class DBManager:
         DBManager.execute_query(query, values, where_clause, where_values)
 
     @staticmethod
-    def update_s3_location(unique_id, s3_location):
-        query = "UPDATE file_processes SET s3_location = %s, updated_at = NOW()"
-        values = (s3_location,)
+    def update_location(unique_id, location):
+        query = "UPDATE file_processes SET location = %s, updated_at = NOW()"
+        values = (location,)
         where_clause = "WHERE unique_id = %s"
         where_values = (unique_id,)
         DBManager.execute_query(query, values, where_clause, where_values)
@@ -71,7 +90,27 @@ class DBManager:
         """
         values = (unique_id, json.dumps(json_payload), api_status, api_response, error_message)
         DBManager.execute_query(query, values)
+
+    @staticmethod
+    def get_processed_files(hours_back: int = 24):
+        """Get list of files that have been processed in the last N hours"""
+        try:
+            conn = DBManager.get_connection()
+            with conn.cursor() as cur:
+                query = """
+                    SELECT DISTINCT filename 
+                    FROM file_processes 
+                    WHERE created_at >= NOW() - INTERVAL '%s hours'
+                    AND status IN ('Queued', 'Completed', 'Failed')
+                """
+                cur.execute(query, (hours_back,))
+                results = cur.fetchall()
+                return [row[0] for row in results]
+        except Exception as e:
+            logger.error(f"Error getting processed files: {str(e)}")
+            return []
+        finally:
+            conn.close()
     
     def __init__(self):
-        pass
-    
+        pass 

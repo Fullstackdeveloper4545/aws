@@ -45,7 +45,7 @@ def parse_filename(filename: str) -> Dict[str, str]:
     }
 
 
-def parse_aem_line(fields: List[str]) -> Dict[str, Any]:
+def parse_aem_line(fields: List[str]) -> tuple[Dict[str, Any], str]:
     """
     Parse AEM (train header) line according to AEM structure
     AEM*IHTRR*IHT0001*210915*0646*0700*060*Y*411*0022*G*G*N*0*E*004*000*003*C*N*F*N*01666*H*01*01*025*025*0106
@@ -232,4 +232,4 @@ def parse_train_data_to_json(file_content: str, filename: str) -> Optional[Dict[
         
     except Exception as e:
         logger.error(f"Error parsing train data file {filename}: {str(e)}")
-        raise ValueError(f"Error parsing train data file {filename}: {str(e)}")
+        raise ValueError(f"Error parsing train data file {filename}: {str(e)}") 

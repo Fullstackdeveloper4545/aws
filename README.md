@@ -1,20 +1,21 @@
-# Marium - FTP to S3 Data Processing Pipeline with Dashboard
+# Marium - FTP Data Processing Pipeline with Dashboard
 
-A comprehensive data processing pipeline that monitors FTP servers, processes files through AWS Lambda functions, and provides a web dashboard for monitoring and management.
+A comprehensive data processing pipeline that monitors FTP servers, processes files through AWS Lambda functions, and provides a web dashboard for monitoring and management with email notifications.
 
 ## 🏗️ Architecture Overview
 
 ```
-FTP Server → S3 Upload → EventBridge (5min schedule) → FTP Listener Lambda → SQS → Transformer Lambda → External API → Dashboard
+FTP Server → EventBridge (1min schedule) → FTP Reader Lambda → SQS → Transformer Lambda → External API → Dashboard
 ```
 
 ### Core Components
 
-1. **FTP Listener Lambda**: Monitors S3 for new file uploads, parses train data files, and queues JSON data
+1. **FTP Reader Lambda**: Monitors FTP server for new files, parses train data files, and queues JSON data with email notifications
 2. **Transformer Lambda**: Processes JSON data from SQS and sends to external APIs
-3. **Django Dashboard**: Web interface for monitoring file processing status and API calls
-4. **PostgreSQL Database**: Stores file processing metadata and API call history
-5. **AWS Infrastructure**: S3, SQS, Lambda, RDS, VPC, and security groups
+3. **Django Dashboard**: Web interface for monitoring file processing status, API calls, and email configuration
+4. **PostgreSQL Database**: Stores file processing metadata, API call history, and email configurations
+5. **AWS Infrastructure**: SQS, Lambda, RDS, VPC, and security groups
+6. **SendGrid Integration**: Email notifications for processing failures
 
 ## 📁 Project Structure
 
@@ -22,24 +23,28 @@ FTP Server → S3 Upload → EventBridge (5min schedule) → FTP Listener Lambda
 middleware/
 ├── dashboard/                 # Django web dashboard
 │   ├── src/
-│   │   ├── account/          # User authentication
-│   │   ├── core/             # File processing models and views
+│   │   ├── account/          # User authentication and management
+│   │   ├── core/             # File processing models, views, and email config
 │   │   └── dashboard/        # Django project settings
 │   ├── docker-compose.yml    # Development environment
+│   ├── docker-compose-prod.yml # Production environment
 │   ├── Dockerfile           # Production container
+│   ├── deploy.sh            # Dashboard deployment script
 │   └── requirements.txt     # Python dependencies
-├── ftp_listener/            # FTP monitoring Lambda
+├── ftp_reader/              # FTP monitoring Lambda
 │   ├── lambda_handler.py    # Main Lambda function
 │   ├── db_manager.py        # Database operations
-│   └── train_data_parser.py # Train data parsing logic
+│   ├── ftp_manager.py       # FTP server operations
+│   ├── train_data_parser.py # Train data parsing logic
+│   └── email_manager.py     # SendGrid email notifications
 ├── transformer/             # Data transformation Lambda
 │   ├── lambda_handler.py    # API integration function
 │   └── db_manager.py        # Database operations
 ├── layer/                   # Lambda layer dependencies
-├── template.yaml            # Main CloudFormation template
-├── template_public_rds.yaml # Public RDS template
-├── template_private_rds_with_sec_grp.yaml # Private RDS template
-├── deploy.sh               # Deployment script
+│   └── requirements.txt     # Shared Python packages
+├── template_infrastructure.yaml # Infrastructure stack (VPC, RDS, SQS)
+├── template_application.yaml # Application stack (Lambda functions)
+├── deploy.sh               # Main deployment script
 └── samconfig.toml          # SAM configuration
 ```
 
@@ -51,6 +56,7 @@ middleware/
 - Python 3.9+
 - Docker and Docker Compose (for dashboard)
 - PostgreSQL (for local development)
+- SendGrid account (for email notifications)
 
 ### 1. Deploy AWS Infrastructure
 
@@ -65,21 +71,23 @@ chmod +x deploy.sh
 ```
 
 The deployment script will:
-- Create/update the CloudFormation stack
+- Create/update the CloudFormation stacks
 - Set up VPC, subnets, security groups
 - Deploy Lambda functions with necessary IAM roles
-- Create S3 bucket, SQS queues, and RDS instance
+- Create SQS queues and RDS instance
+- Configure EventBridge scheduling
 
 ### 2. Configure Environment Variables
 
-Update the `template.yaml` parameters or use the deployment script with custom values:
+Update the CloudFormation template parameters or use the deployment script with custom values:
 
 ```yaml
 Parameters:
-  S3BucketName: "your-unique-bucket-name"
   APIEndpoint: "https://your-api-endpoint.com"
   PGPassword: "your-secure-password"
-  EC2KeyPairName: "your-key-pair"
+  SendGridApiKey: "your-sendgrid-api-key"
+  SendGridFromEmail: "notifications@yourdomain.com"
+  SendGridFromName: "FTP Reader System"
 ```
 
 ### 3. Start the Dashboard
@@ -87,6 +95,11 @@ Parameters:
 ```bash
 cd dashboard
 
+# Run the dashboard deployment script
+chmod +x deploy.sh
+./deploy.sh
+
+# Or manually:
 # Copy environment file
 cp env.example .env
 
@@ -94,29 +107,30 @@ cp env.example .env
 nano .env
 
 # Start with Docker Compose
-docker-compose up -d
-
-# Or run locally
-pip install -r requirements.txt
-python src/manage.py migrate
-python src/manage.py runserver
+docker-compose -f docker-compose-prod.yml up -d
 ```
+
+**Note**: On the server (EC2), the deployed application is located at `/var/www`.
 
 ## 🔧 Configuration
 
 ### AWS Lambda Functions
 
-#### FTP Listener Lambda
-- **Trigger**: S3 upload events via EventBridge
-- **Function**: `ftp_listener/lambda_handler.py`
+#### FTP Reader Lambda
+- **Trigger**: EventBridge schedule (every 1 minute)
+- **Function**: `ftp_reader/lambda_handler.py`
 - **Environment Variables**:
-  - `S3_BUCKET`: S3 bucket name
   - `SQS_QUEUE_URL`: SQS queue URL for transformer
+  - `PG_HOST`, `PG_PORT`, `PG_DB`, `PG_USER`, `PG_PASSWORD`: Database connection
+  - `FTP_HOST`, `FTP_USERNAME`, `FTP_PASSWORD`, `FTP_PORT`: FTP server connection
+  - `FTP_SOURCE_FOLDER`, `FTP_DEST_FOLDER`: FTP folder configuration
+  - `SENDGRID_API_KEY`, `SENDGRID_FROM_EMAIL`, `SENDGRID_FROM_NAME`: Email notifications
 
 #### Transformer Lambda
-- **Trigger**: SQS messages from FTP listener
+- **Trigger**: SQS messages from FTP reader
 - **Function**: `transformer/lambda_handler.py`
 - **Environment Variables**:
+  - `PG_HOST`, `PG_PORT`, `PG_DB`, `PG_USER`, `PG_PASSWORD`: Database connection
   - `API_ENDPOINT`: External API endpoint
   - `API_TIMEOUT`: Request timeout (default: 30s)
   - `API_HEADERS`: Additional headers (JSON format)
@@ -128,7 +142,7 @@ python src/manage.py runserver
 DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.postgresql',
-        'NAME': 'marium_dashboard',
+        'NAME': 'ftp_processor',
         'USER': 'postgres',
         'PASSWORD': 'your_password',
         'HOST': 'localhost',  # or RDS endpoint
@@ -137,13 +151,10 @@ DATABASES = {
 }
 ```
 
-#### AWS S3 Configuration
-```python
-AWS_ACCESS_KEY_ID = 'your-access-key'
-AWS_SECRET_ACCESS_KEY = 'your-secret-key'
-AWS_STORAGE_BUCKET_NAME = 'your-bucket-name'
-AWS_S3_REGION_NAME = 'us-east-1'
-```
+#### Email Configuration
+- Access email configuration through the dashboard
+- Add recipient email addresses for failure notifications
+- Configure SendGrid settings in Lambda environment variables
 
 ## 📊 Data Models
 
@@ -153,10 +164,10 @@ Tracks file processing status and metadata:
 ```python
 class FileProcess(models.Model):
     unique_id = models.UUIDField(primary_key=True)
-    site_id = models.CharField(max_length=255)
     filename = models.CharField(max_length=255)
-    s3_location = models.CharField(max_length=500)
+    location = models.CharField(max_length=500)  # File location (FTP path)
     status = models.CharField(max_length=20)  # Pending, Downloaded, Queued, Processing, Processed, Failed
+    site_id = models.CharField(max_length=255, null=True)
     error_message = models.TextField(null=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -175,14 +186,25 @@ class ApiCall(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
 ```
 
+### EmailConfig Model
+Manages email notification recipients:
+
+```python
+class EmailConfig(models.Model):
+    email = models.EmailField(unique=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+```
+
 ## 🔄 Data Flow
 
-### 1. File Upload Process
-1. File uploaded to S3 bucket
-2. EventBridge triggers FTP Listener Lambda
-3. Lambda parses train data file into JSON format
+### 1. File Processing Process
+1. EventBridge triggers FTP Reader Lambda every minute
+2. Lambda connects to FTP server and checks for new files
+3. New files are moved to processed folder and parsed into JSON format
 4. JSON data sent to SQS queue
 5. Database updated with processing status
+6. Email notifications sent for failures
 
 ### 2. Data Transformation Process
 1. Transformer Lambda receives SQS message
@@ -194,7 +216,8 @@ class ApiCall(models.Model):
 1. Django dashboard queries database
 2. Displays file processing status and API call history
 3. Provides user authentication and management
-4. Real-time monitoring of pipeline health
+4. Manages email configuration for notifications
+5. Real-time monitoring of pipeline health
 
 ## 🐳 Docker Deployment
 
@@ -207,27 +230,31 @@ docker-compose up -d
 ### Production Environment
 ```bash
 cd dashboard
+./deploy.sh  # Automated deployment script
+# Or manually:
 docker-compose -f docker-compose-prod.yml up -d
 ```
 
 ## 🔍 Monitoring and Logging
 
 ### CloudWatch Logs
-- **FTP Listener**: `/aws/lambda/ftp-listener`
+- **FTP Reader**: `/aws/lambda/ftp-reader`
 - **Transformer**: `/aws/lambda/transformer`
 
 ### Key Metrics to Monitor
 - Lambda execution duration and errors
 - SQS queue depth and message processing
 - RDS connection pool and query performance
-- S3 bucket storage and access patterns
+- FTP connection success/failure rates
 - API response times and success rates
+- Email notification delivery rates
 
 ### Dashboard Monitoring
 - File processing status overview
 - API call success/failure rates
 - Error message tracking
 - Processing timeline visualization
+- Email configuration management
 
 ## 🛠️ Development
 
@@ -260,8 +287,8 @@ python manage.py runserver
 # Install SAM CLI
 pip install aws-sam-cli
 
-# Test FTP Listener
-sam local invoke FTPListenerFunction --event events/s3-upload-event.json
+# Test FTP Reader
+sam local invoke FTPReaderFunction --event events/scheduled-event.json
 
 # Test Transformer
 sam local invoke TransformerFunction --event events/sqs-message-event.json
@@ -274,14 +301,15 @@ sam local invoke TransformerFunction --event events/sqs-message-event.json
 - **Security Groups**: Restrictive inbound/outbound rules
 - **Encryption**: Data encrypted at rest and in transit
 - **Secrets Management**: Consider using AWS Secrets Manager for production
+- **Email Security**: SendGrid API keys stored securely in environment variables
 
 ## 💰 Cost Optimization
 
 - **Lambda**: Optimize timeout and memory settings
 - **RDS**: Use appropriate instance size and storage
-- **S3**: Implement lifecycle policies for old files
 - **SQS**: Monitor queue depth and adjust processing
 - **CloudWatch**: Set up billing alerts
+- **EventBridge**: Monitor scheduled rule execution
 
 ## 🚨 Troubleshooting
 
@@ -289,7 +317,7 @@ sam local invoke TransformerFunction --event events/sqs-message-event.json
 
 1. **Lambda Function Errors**
    ```bash
-   aws logs tail /aws/lambda/ftp-listener --follow
+   aws logs tail /aws/lambda/ftp-reader --follow
    aws logs tail /aws/lambda/transformer --follow
    ```
 
@@ -298,12 +326,22 @@ sam local invoke TransformerFunction --event events/sqs-message-event.json
    - Verify database credentials
    - Test connectivity from Lambda VPC
 
-3. **SQS Message Processing**
+3. **FTP Connection Issues**
+   - Verify FTP server credentials
+   - Check network connectivity
+   - Review FTP server logs
+
+4. **Email Notification Issues**
+   - Verify SendGrid API key
+   - Check email configuration in dashboard
+   - Review SendGrid delivery logs
+
+5. **SQS Message Processing**
    ```bash
    aws sqs get-queue-attributes --queue-url <queue-url> --attribute-names All
    ```
 
-4. **Dashboard Issues**
+6. **Dashboard Issues**
    - Check Django logs: `docker-compose logs dashboard`
    - Verify database migrations: `python manage.py showmigrations`
    - Test static files: `python manage.py collectstatic`
@@ -312,7 +350,7 @@ sam local invoke TransformerFunction --event events/sqs-message-event.json
 
 ```bash
 # Check CloudFormation stack status
-aws cloudformation describe-stacks --stack-name ftp-transformer
+aws cloudformation describe-stacks --stack-name marium-application
 
 # List Lambda functions
 aws lambda list-functions
@@ -321,7 +359,12 @@ aws lambda list-functions
 aws sqs list-queues
 
 # Test database connectivity
-psql -h <rds-endpoint> -U postgres -d marium_dashboard
+psql -h <rds-endpoint> -U postgres -d ftp_processor
+
+# Check email configurations
+python manage.py shell
+>>> from core.models import EmailConfig
+>>> EmailConfig.objects.all()
 ```
 
 ## 📈 Scaling Considerations

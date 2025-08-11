@@ -7,7 +7,7 @@ from django.db.models import Q
 from django.urls import reverse
 from datetime import datetime
 import csv
-from .models import FileProcess, ApiCall, EmailConfig
+from .models import FileProcess, ApiCall, EmailConfig, Credentials, SiteCredential
 from account.mixins import UserManagementAccessMixin
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.views.generic import ListView, CreateView, UpdateView, DeleteView
@@ -276,3 +276,308 @@ class EmailConfigDeleteView(LoginRequiredMixin, UserManagementAccessMixin, Delet
     def delete(self, request, *args, **kwargs):
         messages.success(request, 'Email configuration deleted successfully.')
         return super().delete(request, *args, **kwargs)
+
+# Credentials Views
+class CredentialsListView(LoginRequiredMixin, UserManagementAccessMixin, ListView):
+    """List all credentials"""
+    model = Credentials
+    template_name = 'core/credentials_list.html'
+    context_object_name = 'credentials'
+    ordering = ['-created_at']
+
+class CredentialsCreateView(LoginRequiredMixin, UserManagementAccessMixin, CreateView):
+    """Add a new credential"""
+    model = Credentials
+    template_name = 'core/credentials_form.html'
+    fields = [
+        'name', 'credential_type', 
+        # 'username', 'password', 
+        'api_key', 'secret_key',
+        'additional_config', 'is_active'
+    ]
+    success_url = reverse_lazy('core:credentials_list')
+    
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context['action'] = 'Add'
+        return context
+    
+    def form_valid(self, form):
+        messages.success(self.request, 'Credential added successfully.')
+        return super().form_valid(form)
+    
+    def form_invalid(self, form):
+        messages.error(self.request, 'Please correct the errors below.')
+        return super().form_invalid(form)
+
+class CredentialsUpdateView(LoginRequiredMixin, UserManagementAccessMixin, UpdateView):
+    """Edit an existing credential"""
+    model = Credentials
+    template_name = 'core/credentials_form.html'
+    fields = [
+        'name', 'credential_type', 
+        # 'username', 'password', 
+        'api_key', 'secret_key',
+        'additional_config', 'is_active'
+    ]
+    success_url = reverse_lazy('core:credentials_list')
+    
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context['action'] = 'Edit'
+        return context
+    
+    def form_valid(self, form):
+        messages.success(self.request, 'Credential updated successfully.')
+        return super().form_valid(form)
+    
+    def form_invalid(self, form):
+        messages.error(self.request, 'Please correct the errors below.')
+        return super().form_invalid(form)
+
+class CredentialsDeleteView(LoginRequiredMixin, UserManagementAccessMixin, DeleteView):
+    """Delete a credential"""
+    model = Credentials
+    template_name = 'core/credentials_confirm_delete.html'
+    success_url = reverse_lazy('core:credentials_list')
+    
+    def delete(self, request, *args, **kwargs):
+        messages.success(request, 'Credential deleted successfully.')
+        return super().delete(request, *args, **kwargs)
+
+class CredentialsDetailView(LoginRequiredMixin, UserManagementAccessMixin, UpdateView):
+    """Detail view for credentials showing associated site IDs"""
+    model = Credentials
+    template_name = 'core/credentials_detail.html'
+    fields = []
+    
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context['site_credentials'] = self.object.site_credentials.all().order_by('site_id')
+        return context
+
+# Site Credential Views
+class SiteCredentialListView(LoginRequiredMixin, UserManagementAccessMixin, ListView):
+    """List all site credential associations"""
+    model = SiteCredential
+    template_name = 'core/site_credential_list.html'
+    context_object_name = 'site_credentials'
+    ordering = ['-created_at']
+
+class SiteCredentialCreateView(LoginRequiredMixin, UserManagementAccessMixin, CreateView):
+    """Add a new site credential association"""
+    model = SiteCredential
+    template_name = 'core/site_credential_form.html'
+    fields = ['credentials', 'site_id', 'is_active']
+    success_url = reverse_lazy('core:site_credential_list')
+    
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context['action'] = 'Add'
+        context['credentials_list'] = Credentials.objects.filter(is_active=True).order_by('name')
+        return context
+    
+    def form_valid(self, form):
+        # Check if this association already exists
+        if SiteCredential.objects.filter(
+            credentials=form.cleaned_data['credentials'],
+            site_id=form.cleaned_data['site_id']
+        ).exists():
+            messages.error(self.request, 'This credential is already associated with this site ID.')
+            return self.form_invalid(form)
+        
+        messages.success(self.request, 'Site credential association added successfully.')
+        return super().form_valid(form)
+    
+    def form_invalid(self, form):
+        messages.error(self.request, 'Please correct the errors below.')
+        return super().form_invalid(form)
+
+class SiteCredentialUpdateView(LoginRequiredMixin, UserManagementAccessMixin, UpdateView):
+    """Edit an existing site credential association"""
+    model = SiteCredential
+    template_name = 'core/site_credential_form.html'
+    fields = ['credentials', 'site_id', 'is_active']
+    success_url = reverse_lazy('core:site_credential_list')
+    
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context['action'] = 'Edit'
+        context['credentials_list'] = Credentials.objects.filter(is_active=True).order_by('name')
+        return context
+    
+    def form_valid(self, form):
+        # Check if this association already exists (excluding current record)
+        if SiteCredential.objects.filter(
+            credentials=form.cleaned_data['credentials'],
+            site_id=form.cleaned_data['site_id']
+        ).exclude(id=self.object.id).exists():
+            messages.error(self.request, 'This credential is already associated with this site ID.')
+            return self.form_invalid(form)
+        
+        messages.success(self.request, 'Site credential association updated successfully.')
+        return super().form_valid(form)
+    
+    def form_invalid(self, form):
+        messages.error(self.request, 'Please correct the errors below.')
+        return super().form_invalid(form)
+
+class SiteCredentialDeleteView(LoginRequiredMixin, UserManagementAccessMixin, DeleteView):
+    """Delete a site credential association"""
+    model = SiteCredential
+    template_name = 'core/site_credential_confirm_delete.html'
+    success_url = reverse_lazy('core:site_credential_list')
+    
+    def delete(self, request, *args, **kwargs):
+        messages.success(request, 'Site credential association deleted successfully.')
+        return super().delete(request, *args, **kwargs)
+
+# AJAX Views for Credentials
+@login_required
+def get_credentials_data(request):
+    """AJAX endpoint for server-side DataTable processing for credentials"""
+    try:
+        # Get DataTable parameters
+        draw = int(request.GET.get('draw', 1))
+        start = int(request.GET.get('start', 0))
+        length = int(request.GET.get('length', 10))
+        search_value = request.GET.get('search[value]', '')
+        
+        # Get filter parameters
+        credential_type = request.GET.get('credential_type', '')
+        is_active = request.GET.get('is_active', '')
+        
+        # Build query
+        queryset = Credentials.objects.all()
+        
+        # Apply filters
+        if credential_type:
+            queryset = queryset.filter(credential_type=credential_type)
+        
+        if is_active != '':
+            queryset = queryset.filter(is_active=is_active == 'true')
+        
+        # Apply search
+        if search_value:
+            queryset = queryset.filter(
+                Q(name__icontains=search_value) |
+                Q(username__icontains=search_value) |
+                Q(host__icontains=search_value) |
+                Q(credential_type__icontains=search_value)
+            )
+        
+        # Get total count before pagination
+        total_records = queryset.count()
+        
+        # Apply ordering
+        queryset = queryset.order_by('-created_at')
+        
+        # Apply pagination
+        queryset = queryset[start:start + length]
+        
+        # Prepare data for DataTable
+        data = []
+        for credential in queryset:
+            data.append({
+                'id': str(credential.unique_id)[:8],
+                'name': credential.name,
+                'credential_type': credential.get_credential_type_display(),
+                'username': credential.username or '-',
+                'site_count': credential.site_credentials.count(),
+                'is_active': 'Yes' if credential.is_active else 'No',
+                'created_at': credential.created_at.strftime('%b %d, %Y %H:%M'),
+                'detail_url': reverse('core:credentials_detail', kwargs={'pk': credential.unique_id}),
+                'edit_url': reverse('core:credentials_update', kwargs={'pk': credential.unique_id}),
+                'delete_url': reverse('core:credentials_delete', kwargs={'pk': credential.unique_id})
+            })
+        
+        return JsonResponse({
+            'draw': draw,
+            'recordsTotal': total_records,
+            'recordsFiltered': total_records,
+            'data': data
+        })
+        
+    except Exception as e:
+        return JsonResponse({
+            'draw': int(request.GET.get('draw', 1)),
+            'recordsTotal': 0,
+            'recordsFiltered': 0,
+            'data': [],
+            'error': str(e)
+        }, status=500)
+
+@login_required
+def get_site_credentials_data(request):
+    """AJAX endpoint for server-side DataTable processing for site credentials"""
+    try:
+        # Get DataTable parameters
+        draw = int(request.GET.get('draw', 1))
+        start = int(request.GET.get('start', 0))
+        length = int(request.GET.get('length', 10))
+        search_value = request.GET.get('search[value]', '')
+        
+        # Get filter parameters
+        site_id = request.GET.get('site_id', '')
+        credential_name = request.GET.get('credential_name', '')
+        is_active = request.GET.get('is_active', '')
+        
+        # Build query
+        queryset = SiteCredential.objects.select_related('credentials').all()
+        
+        # Apply filters
+        if site_id:
+            queryset = queryset.filter(site_id__icontains=site_id)
+        
+        if credential_name:
+            queryset = queryset.filter(credentials__name__icontains=credential_name)
+        
+        if is_active != '':
+            queryset = queryset.filter(is_active=is_active == 'true')
+        
+        # Apply search
+        if search_value:
+            queryset = queryset.filter(
+                Q(site_id__icontains=search_value) |
+                Q(credentials__name__icontains=search_value) |
+                Q(credentials__credential_type__icontains=search_value)
+            )
+        
+        # Get total count before pagination
+        total_records = queryset.count()
+        
+        # Apply ordering
+        queryset = queryset.order_by('-created_at')
+        
+        # Apply pagination
+        queryset = queryset[start:start + length]
+        
+        # Prepare data for DataTable
+        data = []
+        for site_cred in queryset:
+            data.append({
+                'id': site_cred.id,
+                'site_id': site_cred.site_id,
+                'credential_name': site_cred.credentials.name,
+                'credential_type': site_cred.credentials.get_credential_type_display(),
+                'is_active': 'Yes' if site_cred.is_active else 'No',
+                'created_at': site_cred.created_at.strftime('%b %d, %Y %H:%M'),
+                'edit_url': reverse('core:site_credential_update', kwargs={'pk': site_cred.id}),
+                'delete_url': reverse('core:site_credential_delete', kwargs={'pk': site_cred.id})
+            })
+        
+        return JsonResponse({
+            'draw': draw,
+            'recordsTotal': total_records,
+            'recordsFiltered': total_records,
+            'data': data
+        })
+        
+    except Exception as e:
+        return JsonResponse({
+            'draw': int(request.GET.get('draw', 1)),
+            'recordsTotal': 0,
+            'recordsFiltered': 0,
+            'data': [],
+            'error': str(e)
+        }, status=500)

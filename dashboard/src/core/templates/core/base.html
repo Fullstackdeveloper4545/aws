@@ -73,6 +73,12 @@
                         <i class="bi bi-people"></i> User Management
                     </a>
                 </li>
+                <li class="nav-item">
+                    <a class="nav-link {% if 'account:users' in request.resolver_match.view_name %}active{% endif %}" 
+                       href="{% url 'core:credentials_list' %}">
+                        <i class="bi bi-shield-lock"></i> API Credentials
+                    </a>
+                </li>
             </ul>
         </div>
     </nav>

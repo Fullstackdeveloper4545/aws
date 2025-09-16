@@ -1,0 +1,624 @@
+{% extends 'core/base.html' %}
+{% load static %}
+
+{% block title %}BNSF API Fetch{% endblock %}
+
+{% block extra_css %}
+<style>
+    .bnsf-container {
+        max-width: 1200px;
+        margin: 0 auto;
+        padding: 20px;
+    }
+    
+    .bnsf-card {
+        background: #ffffff;
+        border: 1px solid #e5e7eb;
+        border-radius: 12px;
+        padding: 24px;
+        margin-bottom: 24px;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+    }
+    
+    .bnsf-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 24px;
+        padding-bottom: 16px;
+        border-bottom: 1px solid #e5e7eb;
+    }
+    
+    .bnsf-title {
+        font-size: 24px;
+        font-weight: 600;
+        color: #1f2937;
+        margin: 0;
+    }
+    
+    .bnsf-subtitle {
+        color: #6b7280;
+        font-size: 14px;
+        margin-top: 4px;
+    }
+    
+    .form-group {
+        margin-bottom: 20px;
+    }
+    
+    .form-label {
+        display: block;
+        margin-bottom: 8px;
+        font-weight: 500;
+        color: #374151;
+    }
+    
+    .form-control {
+        width: 100%;
+        padding: 12px 16px;
+        background: #ffffff;
+        border: 1px solid #d1d5db;
+        border-radius: 8px;
+        color: #1f2937;
+        font-size: 14px;
+    }
+    
+    .form-control:focus {
+        outline: none;
+        border-color: #4f46e5;
+        box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.1);
+    }
+    
+    .form-control::file-selector-button {
+        background: #4f46e5;
+        color: white;
+        border: none;
+        padding: 8px 16px;
+        border-radius: 6px;
+        cursor: pointer;
+        margin-right: 12px;
+    }
+    
+    .password-input-container {
+        position: relative;
+        display: inline-block;
+        width: 100%;
+    }
+    
+    .password-input-container .form-control {
+        padding-right: 45px;
+        width: 100%;
+    }
+    
+    .password-toggle {
+        position: absolute;
+        right: 8px;
+        top: 50%;
+        transform: translateY(-50%);
+        background: none;
+        border: none;
+        cursor: pointer;
+        padding: 6px;
+        color: #6b7280;
+        transition: all 0.2s;
+        z-index: 10;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        width: 28px;
+        height: 28px;
+        border-radius: 4px;
+    }
+    
+    .password-toggle:hover {
+        color: #374151;
+        background-color: #f3f4f6;
+    }
+    
+    .password-toggle:focus {
+        outline: none;
+        color: #3b82f6;
+        background-color: #eff6ff;
+    }
+    
+    .password-toggle i {
+        font-size: 18px;
+        line-height: 1;
+    }
+    
+    .btn-primary {
+        background: #4f46e5;
+        color: white;
+        border: none;
+        padding: 12px 24px;
+        border-radius: 8px;
+        font-weight: 500;
+        cursor: pointer;
+        transition: all 0.2s;
+    }
+    
+    .btn-primary:hover {
+        background: #4338ca;
+        transform: translateY(-1px);
+    }
+    
+    .btn-primary:disabled {
+        background: #9ca3af;
+        cursor: not-allowed;
+        transform: none;
+    }
+    
+    .btn-secondary {
+        background: #6b7280;
+        color: white;
+        border: 1px solid #6b7280;
+        padding: 12px 24px;
+        border-radius: 8px;
+        font-weight: 500;
+        cursor: pointer;
+        transition: all 0.2s;
+        text-decoration: none;
+        display: inline-block;
+    }
+    
+    .btn-secondary:hover {
+        background: #4b5563;
+        transform: translateY(-1px);
+    }
+    
+    .progress-container {
+        margin-top: 24px;
+        display: none;
+    }
+    
+    .progress-bar {
+        width: 100%;
+        height: 8px;
+        background: #f3f4f6;
+        border-radius: 4px;
+        overflow: hidden;
+        margin-bottom: 16px;
+    }
+    
+    .progress-fill {
+        height: 100%;
+        background: #4f46e5;
+        width: 0%;
+        transition: width 0.3s ease;
+    }
+    
+    .progress-stats {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+        gap: 16px;
+        margin-bottom: 16px;
+    }
+    
+    .stat-card {
+        background: #f9fafb;
+        padding: 16px;
+        border-radius: 8px;
+        text-align: center;
+        border: 1px solid #e5e7eb;
+    }
+    
+    .stat-label {
+        color: #6b7280;
+        font-size: 12px;
+        margin-bottom: 4px;
+    }
+    
+    .stat-value {
+        color: #1f2937;
+        font-size: 24px;
+        font-weight: 600;
+    }
+    
+    .result-container {
+        margin-top: 24px;
+        padding: 16px;
+        background: #f9fafb;
+        border-radius: 8px;
+        border: 1px solid #e5e7eb;
+        display: none;
+    }
+    
+    .result-success {
+        color: #059669;
+        font-weight: 500;
+    }
+    
+    .result-error {
+        color: #dc2626;
+        font-weight: 500;
+    }
+    
+    .certificate-list {
+        margin-top: 24px;
+    }
+    
+    .certificate-item {
+        background: #f9fafb;
+        border: 1px solid #e5e7eb;
+        border-radius: 8px;
+        padding: 16px;
+        margin-bottom: 12px;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+    }
+    
+    .certificate-info h4 {
+        color: #1f2937;
+        margin: 0 0 4px 0;
+        font-size: 16px;
+    }
+    
+    .certificate-info p {
+        color: #6b7280;
+        margin: 0;
+        font-size: 14px;
+    }
+    
+    .certificate-actions {
+        display: flex;
+        gap: 8px;
+    }
+    
+    .btn-sm {
+        padding: 6px 12px;
+        font-size: 12px;
+    }
+    
+    .switch-container {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        margin-top: 16px;
+    }
+    
+    .switch {
+        position: relative;
+        display: inline-block;
+        width: 44px;
+        height: 24px;
+    }
+    
+    .switch input {
+        opacity: 0;
+        width: 0;
+        height: 0;
+    }
+    
+    .slider {
+        position: absolute;
+        cursor: pointer;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background-color: #d1d5db;
+        transition: .4s;
+        border-radius: 24px;
+    }
+    
+    .slider:before {
+        position: absolute;
+        content: "";
+        height: 18px;
+        width: 18px;
+        left: 3px;
+        bottom: 3px;
+        background-color: white;
+        transition: .4s;
+        border-radius: 50%;
+    }
+    
+    input:checked + .slider {
+        background-color: #4f46e5;
+    }
+    
+    input:checked + .slider:before {
+        transform: translateX(20px);
+    }
+    
+    .alert {
+        padding: 12px 16px;
+        border-radius: 8px;
+        margin-bottom: 16px;
+    }
+    
+    .alert-success {
+        background-color: #d1fae5;
+        border: 1px solid #a7f3d0;
+        color: #065f46;
+    }
+    
+    .alert-error {
+        background-color: #fee2e2;
+        border: 1px solid #fecaca;
+        color: #991b1b;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="bnsf-container">
+    <!-- Messages -->
+    {% if messages %}
+        {% for message in messages %}
+            <div class="alert alert-{{ message.tags }}">
+                {{ message }}
+            </div>
+        {% endfor %}
+    {% endif %}
+    <div class="bnsf-card">
+        <div class="bnsf-header">
+            <div>
+                <h1 class="bnsf-title">BNSF API Fetch</h1>
+                <p class="bnsf-subtitle">Upload certificates and fetch waybill data from BNSF API</p>
+            </div>
+        </div>
+
+        <!-- Certificate Upload Form -->
+        <form id="certificateForm" method="post" enctype="multipart/form-data">
+            {% csrf_token %}
+            <div class="form-group">
+                <label class="form-label" for="id_name">Certificate Name</label>
+                {{ form.name }}
+            </div>
+            
+            <div class="form-group">
+                <label class="form-label" for="id_client_pfx">Client Certificate (.pfx)</label>
+                {{ form.client_pfx }}
+                <small style="color: #6b7280; font-size: 12px;">Upload your BNSF client certificate file</small>
+            </div>
+            
+            <div class="form-group">
+                <label class="form-label" for="id_server_cer">Server Certificate (.cer)</label>
+                {{ form.server_cer }}
+                <small style="color: #6b7280; font-size: 12px;">Upload the BNSF server certificate file</small>
+            </div>
+            
+           <div class="form-group">
+               <label class="form-label" for="id_pfx_password">PFX Password</label>
+               <div class="password-input-container">
+                   <input type="password" name="pfx_password" id="id_pfx_password" class="form-control" placeholder="Enter PFX password">
+                   <button type="button" class="password-toggle" onclick="togglePassword('id_pfx_password')" title="Toggle password visibility">
+                       <i class="bi bi-eye" id="eye-icon-pfx"></i>
+                   </button>
+               </div>
+               <small style="color: #6b7280; font-size: 12px;">Password for the PFX certificate file</small>
+           </div>
+            
+            <div class="form-group">
+                <label class="form-label" for="id_api_url">BNSF API URL</label>
+                {{ form.api_url }}
+            </div>
+            
+            <div class="form-group">
+                <label class="form-label" for="id_site_id">Site ID (Optional)</label>
+                {{ form.site_id }}
+            </div>
+            
+            <div class="switch-container">
+                {{ form.skip_verify }}
+                <label for="id_skip_verify" style="color: #888; font-size: 14px;">Skip SSL verification (development only)</label>
+            </div>
+            
+            <button type="submit" class="btn-primary">Upload Certificate</button>
+        </form>
+    </div>
+
+    <!-- Data Fetching Section -->
+    <div class="bnsf-card">
+        <h2 style="color: #1f2937; margin-bottom: 20px;">Fetch BNSF Data</h2>
+        
+        <div class="form-group">
+            <label class="form-label" for="apiUrl">Cars API URL</label>
+            <input type="text" id="apiUrl" class="form-control" value="https://api-trial.bnsf.com:6443/v1/cars" placeholder="Enter BNSF Cars API URL">
+        </div>
+        
+        <div class="form-group">
+            <label class="form-label" for="certificateSelect">Select Certificate</label>
+            <select id="certificateSelect" class="form-control">
+                <option value="">Choose a certificate...</option>
+                {% for cert in certificates %}
+                <option value="{{ cert.id }}" data-pfx="{{ cert.client_pfx.url }}" data-cer="{{ cert.server_cer.url }}" data-password="{{ cert.pfx_password }}">
+                    {{ cert.name }} ({{ cert.created_at|date:"M d, Y" }})
+                </option>
+                {% endfor %}
+            </select>
+        </div>
+        
+        <div class="switch-container">
+            <label class="switch">
+                <input type="checkbox" id="skipSSL">
+                <span class="slider"></span>
+            </label>
+            <label for="skipSSL" style="color: #888; font-size: 14px;">Skip SSL verification (development only)</label>
+        </div>
+        
+        <div style="margin-top: 20px;">
+            <button id="startFetchBtn" class="btn-primary" disabled>Start Data Fetch</button>
+        </div>
+        
+        <!-- Progress Section -->
+        <div id="progressContainer" class="progress-container">
+            <div class="progress-bar">
+                <div id="progressFill" class="progress-fill"></div>
+            </div>
+            
+            <div class="progress-stats">
+                <div class="stat-card">
+                    <div class="stat-label">Total Cars</div>
+                    <div id="totalCars" class="stat-value">0</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-label">Processed</div>
+                    <div id="processedCars" class="stat-value">0</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-label">Successful</div>
+                    <div id="successfulCars" class="stat-value">0</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-label">Failed</div>
+                    <div id="failedCars" class="stat-value">0</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-label">Waybills in DB</div>
+                    <div id="waybillsInDb" class="stat-value">0</div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Result Section -->
+        <div id="resultContainer" class="result-container">
+            <div id="resultMessage"></div>
+        </div>
+    </div>
+
+    <!-- Certificate List -->
+    {% if certificates %}
+    <div class="bnsf-card certificate-list">
+        <h2 style="color: #1f2937; margin-bottom: 20px;">Uploaded Certificates</h2>
+        {% for cert in certificates %}
+        <div class="certificate-item">
+            <div class="certificate-info">
+                <h4>{{ cert.name }}</h4>
+                <p>Uploaded: {{ cert.created_at|date:"M d, Y H:i" }}</p>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+    {% endif %}
+
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const certificateSelect = document.getElementById('certificateSelect');
+    const startFetchBtn = document.getElementById('startFetchBtn');
+    const progressContainer = document.getElementById('progressContainer');
+    const resultContainer = document.getElementById('resultContainer');
+    
+    // Enable/disable start button based on certificate selection
+    certificateSelect.addEventListener('change', function() {
+        startFetchBtn.disabled = !this.value;
+    });
+    
+    // Start fetch button click handler
+    startFetchBtn.addEventListener('click', function() {
+        const selectedOption = certificateSelect.options[certificateSelect.selectedIndex];
+        if (!selectedOption.value) return;
+        
+        const apiUrl = document.getElementById('apiUrl').value;
+        const skipSSL = document.getElementById('skipSSL').checked;
+        
+        const formData = new FormData();
+        formData.append('api_url', apiUrl);
+        formData.append('certificate_id', selectedOption.value);
+        formData.append('skip_ssl', skipSSL);
+        formData.append('csrfmiddlewaretoken', document.querySelector('[name=csrfmiddlewaretoken]').value);
+        
+        startFetch(formData);
+    });
+    
+    function startFetch(formData) {
+        startFetchBtn.disabled = true;
+        progressContainer.style.display = 'block';
+        resultContainer.style.display = 'none';
+        
+        // Reset progress
+        updateProgress(0, 0, 0, 0);
+        
+        fetch('{% url "core:api_start_bnsf_fetch" %}', {
+            method: 'POST',
+            body: formData
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                pollProgress(data.job_id);
+            } else {
+                showError(data.message || 'Failed to start fetch');
+                startFetchBtn.disabled = false;
+            }
+        })
+        .catch(error => {
+            showError('Error: ' + error.message);
+            startFetchBtn.disabled = false;
+        });
+    }
+    
+    function pollProgress(jobId) {
+        const pollInterval = setInterval(() => {
+            fetch(`{% url "core:api_get_bnsf_progress" "JOB_ID" %}`.replace('JOB_ID', jobId))
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    updateProgress(data.total, data.processed, data.successful, data.failed, data.total_waybills_in_db || 0);
+                    
+                    if (data.done) {
+                        clearInterval(pollInterval);
+                        startFetchBtn.disabled = false;
+                        showSuccess(data.message || 'Data fetch completed!');
+                    }
+                } else {
+                    clearInterval(pollInterval);
+                    showError(data.message || 'Progress check failed');
+                    startFetchBtn.disabled = false;
+                }
+            })
+            .catch(error => {
+                clearInterval(pollInterval);
+                showError('Error checking progress: ' + error.message);
+                startFetchBtn.disabled = false;
+            });
+        }, 1000);
+    }
+    
+    function updateProgress(total, processed, successful, failed, waybillsInDb = 0) {
+        document.getElementById('totalCars').textContent = total;
+        document.getElementById('processedCars').textContent = processed;
+        document.getElementById('successfulCars').textContent = successful;
+        document.getElementById('failedCars').textContent = failed;
+        
+        // Update waybills in database count
+        const waybillsInDbElement = document.getElementById('waybillsInDb');
+        if (waybillsInDbElement) {
+            waybillsInDbElement.textContent = waybillsInDb;
+        }
+        
+        const percentage = total > 0 ? (processed / total) * 100 : 0;
+        document.getElementById('progressFill').style.width = percentage + '%';
+    }
+    
+    function showSuccess(message) {
+        resultContainer.style.display = 'block';
+        resultContainer.innerHTML = '<div class="result-success">✓ ' + message + '</div>';
+    }
+    
+    function showError(message) {
+        resultContainer.style.display = 'block';
+        resultContainer.innerHTML = '<div class="result-error">✗ ' + message + '</div>';
+    }
+    
+    function togglePassword(inputId) {
+        const input = document.getElementById(inputId);
+        const eyeIcon = document.getElementById('eye-icon-pfx');
+        
+        if (input && eyeIcon) {
+            if (input.type === 'password') {
+                input.type = 'text';
+                eyeIcon.className = 'bi bi-eye-slash';
+            } else {
+                input.type = 'password';
+                eyeIcon.className = 'bi bi-eye';
+            }
+        }
+    }
+});
+</script>
+{% endblock %}

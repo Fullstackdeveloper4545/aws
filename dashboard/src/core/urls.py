@@ -1,5 +1,5 @@
 from django.urls import path
-from . import views
+from . import views, bnsf_views
 
 app_name = 'core'
 
@@ -28,4 +28,12 @@ urlpatterns = [
     # AJAX endpoints for credentials
     path('api/credentials/', views.get_credentials_data, name='get_credentials_data'),
     path('api/site-credentials/', views.get_site_credentials_data, name='get_site_credentials_data'),
+    
+    # BNSF API Fetch
+    path('bnsf-fetch/', bnsf_views.bnsf_fetch_data, name='bnsf_fetch_data'),
+    path('bnsf-data/', bnsf_views.bnsf_data_list, name='bnsf_data_list'),
+    path('api/bnsf/fetch-waybill/', bnsf_views.fetch_bnsf_waybill, name='api_fetch_bnsf_waybill'),
+    path('api/bnsf/waybill/<int:waybill_id>/', bnsf_views.get_waybill_data, name='api_get_waybill_data'),
+    path('api/bnsf/start-fetch/', bnsf_views.start_bnsf_fetch, name='api_start_bnsf_fetch'),
+    path('api/bnsf/progress/<str:job_id>/', bnsf_views.get_bnsf_progress, name='api_get_bnsf_progress'),
 ]

@@ -7,7 +7,7 @@ from django.db.models import Q
 from django.urls import reverse
 from datetime import datetime
 import csv
-from .models import FileProcess, ApiCall, EmailConfig, Credentials, SiteCredential
+from .models import FileProcess, ApiCall, EmailConfig, Credentials, SiteCredential, BNSFWaybill, BNSFCertificate
 from account.mixins import UserManagementAccessMixin
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.views.generic import ListView, CreateView, UpdateView, DeleteView

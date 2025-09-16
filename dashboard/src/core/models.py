@@ -142,3 +142,43 @@ class SiteCredential(models.Model):
     
     def __str__(self):
         return f"{self.credentials.name} - Site: {self.site_id}"
+
+class BNSFWaybill(models.Model):
+    """Model for storing BNSF waybill data"""
+    
+    unique_id = models.UUIDField(default=uuid.uuid4, editable=False)
+    equipment_initial = models.CharField(max_length=10)
+    equipment_number = models.CharField(max_length=20)
+    waybill_data = models.JSONField()
+    processed_at = models.DateTimeField(auto_now_add=True)
+    
+    class Meta:
+        db_table = 'bnsf_waybills'
+        verbose_name = 'BNSF Waybill'
+        verbose_name_plural = 'BNSF Waybills'
+        ordering = ['-processed_at']
+    
+    def __str__(self):
+        return f"{self.equipment_initial}{self.equipment_number} ({self.processed_at})"
+
+class BNSFCertificate(models.Model):
+    """Model for storing BNSF API certificate information"""
+    
+    name = models.CharField(max_length=100)
+    client_pfx = models.FileField(upload_to='certificates/')
+    server_cer = models.FileField(upload_to='certificates/')
+    pfx_password = models.CharField(max_length=100)
+    api_url = models.URLField(default="https://api-trial.bnsf.com:6443/v1/cars")
+    skip_verify = models.BooleanField(default=False)
+    site_id = models.CharField(max_length=255, null=True, blank=True)
+    is_active = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    
+    class Meta:
+        db_table = 'bnsf_certificates'
+        verbose_name = 'BNSF Certificate'
+        verbose_name_plural = 'BNSF Certificates'
+        ordering = ['-created_at']
+    
+    def __str__(self):
+        return f"{self.name} ({self.created_at})"

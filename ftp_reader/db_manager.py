@@ -101,7 +101,7 @@ class DBManager:
                     SELECT DISTINCT filename 
                     FROM file_processes 
                     WHERE created_at >= NOW() - INTERVAL '%s hours'
-                    AND status IN ('Queued', 'Completed', 'Failed')
+                    AND status IN ('Queued', 'Processed', 'Failed')
                 """
                 cur.execute(query, (hours_back,))
                 results = cur.fetchall()

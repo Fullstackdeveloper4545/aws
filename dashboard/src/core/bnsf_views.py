@@ -50,50 +50,87 @@ def bnsf_data_list(request):
 def fetch_bnsf_waybill(request):
     """API endpoint to fetch BNSF waybill data"""
     try:
-        data = json.loads(request.body)
+        logger.info("BNSF waybill fetch request received")
+        
+        # Parse request data
+        try:
+            data = json.loads(request.body)
+        except json.JSONDecodeError as e:
+            logger.error(f"Invalid JSON in request: {str(e)}")
+            return JsonResponse({
+                'success': False,
+                'error': 'Invalid JSON data'
+            }, status=400)
+        
         equipment_initial = data.get('equipment_initial', '').strip()
         equipment_number = data.get('equipment_number', '').strip()
         
+        logger.info(f"Fetching waybill for {equipment_initial}{equipment_number}")
+        
         if not equipment_initial or not equipment_number:
+            logger.warning("Missing equipment initial or number")
             return JsonResponse({
                 'success': False,
                 'error': 'Equipment initial and number are required'
             }, status=400)
         
         # Get the first active certificate
-        certificate = BNSFCertificate.objects.filter(is_active=True).first()
-        if not certificate:
+        try:
+            certificate = BNSFCertificate.objects.filter(is_active=True).first()
+            if not certificate:
+                logger.error("No active BNSF certificate found")
+                return JsonResponse({
+                    'success': False,
+                    'error': 'No active BNSF certificate found. Please upload a certificate first.'
+                }, status=400)
+            
+            logger.info(f"Using certificate: {certificate.name}")
+            
+        except Exception as e:
+            logger.error(f"Error getting certificate: {str(e)}")
             return JsonResponse({
                 'success': False,
-                'error': 'No active BNSF certificate found'
-            }, status=400)
+                'error': 'Error accessing certificate data'
+            }, status=500)
         
         # Fetch data
-        fetcher = BNSFDataFetcher(certificate.id)
-        result = fetcher.fetch_single_waybill(equipment_initial, equipment_number)
-        
-        if result['success']:
-            return JsonResponse({
-                'success': True,
-                'message': f'Successfully fetched waybill for {equipment_initial}{equipment_number}',
-                'waybill_id': result.get('waybill_id')
-            })
-        else:
+        try:
+            fetcher = BNSFDataFetcher(certificate.id)
+            result = fetcher.fetch_single_waybill(equipment_initial, equipment_number)
+            
+            if result['success']:
+                logger.info(f"Successfully fetched waybill for {equipment_initial}{equipment_number}")
+                return JsonResponse({
+                    'success': True,
+                    'message': f'Successfully fetched waybill for {equipment_initial}{equipment_number}',
+                    'waybill_id': result.get('waybill_id')
+                })
+            else:
+                error_msg = result.get('error', 'Failed to fetch waybill data')
+                logger.error(f"Failed to fetch waybill: {error_msg}")
+                return JsonResponse({
+                    'success': False,
+                    'error': error_msg
+                }, status=400)
+                
+        except ValueError as e:
+            logger.error(f"Certificate error: {str(e)}")
             return JsonResponse({
                 'success': False,
-                'error': result.get('error', 'Failed to fetch waybill data')
+                'error': f'Certificate error: {str(e)}'
             }, status=400)
+        except Exception as e:
+            logger.error(f"Error in BNSFDataFetcher: {str(e)}")
+            return JsonResponse({
+                'success': False,
+                'error': f'Error fetching data: {str(e)}'
+            }, status=500)
             
-    except json.JSONDecodeError:
-        return JsonResponse({
-            'success': False,
-            'error': 'Invalid JSON data'
-        }, status=400)
     except Exception as e:
-        logger.error(f"Error fetching BNSF waybill: {str(e)}")
+        logger.error(f"Unexpected error in fetch_bnsf_waybill: {str(e)}", exc_info=True)
         return JsonResponse({
             'success': False,
-            'error': 'An error occurred while fetching data'
+            'error': 'An unexpected error occurred while fetching data'
         }, status=500)
 
 @login_required
@@ -124,43 +161,72 @@ def get_waybill_data(request, waybill_id):
 def start_bnsf_fetch(request):
     """Start BNSF data fetch process"""
     try:
+        logger.info("BNSF bulk fetch request received")
+        
         certificate_id = request.POST.get('certificate_id')
         api_url = request.POST.get('api_url', 'https://api-trial.bnsf.com:6443/v1/cars')
         skip_ssl = request.POST.get('skip_ssl', 'false').lower() == 'true'
         
         if not certificate_id:
+            logger.warning("No certificate ID provided")
             return JsonResponse({
                 'success': False,
                 'message': 'Certificate ID is required'
             }, status=400)
         
         # Update certificate with new settings
-        certificate = get_object_or_404(BNSFCertificate, id=certificate_id)
-        certificate.api_url = api_url
-        certificate.skip_verify = skip_ssl
-        certificate.save()
-        
-        # Start fetch process (simplified for now)
-        fetcher = BNSFDataFetcher(certificate.id)
-        result = fetcher.fetch_all_cars()
-        
-        if result['success']:
-            return JsonResponse({
-                'success': True,
-                'message': 'Data fetch started successfully',
-                'job_id': 'bnsf_fetch_' + str(certificate.id)
-            })
-        else:
+        try:
+            certificate = get_object_or_404(BNSFCertificate, id=certificate_id)
+            certificate.api_url = api_url
+            certificate.skip_verify = skip_ssl
+            certificate.save()
+            logger.info(f"Updated certificate {certificate.name} with new settings")
+        except Exception as e:
+            logger.error(f"Error updating certificate: {str(e)}")
             return JsonResponse({
                 'success': False,
-                'message': result.get('error', 'Failed to start data fetch')
+                'message': f'Error updating certificate: {str(e)}'
+            }, status=500)
+        
+        # Start fetch process
+        try:
+            fetcher = BNSFDataFetcher(certificate.id)
+            result = fetcher.fetch_all_cars()
+            
+            if result['success']:
+                logger.info("Bulk fetch completed successfully")
+                return JsonResponse({
+                    'success': True,
+                    'message': 'Data fetch completed successfully',
+                    'job_id': 'bnsf_fetch_' + str(certificate.id),
+                    'data': result.get('data', {})
+                })
+            else:
+                error_msg = result.get('error', 'Failed to start data fetch')
+                logger.error(f"Bulk fetch failed: {error_msg}")
+                return JsonResponse({
+                    'success': False,
+                    'message': error_msg
+                }, status=400)
+                
+        except ValueError as e:
+            logger.error(f"Certificate error in bulk fetch: {str(e)}")
+            return JsonResponse({
+                'success': False,
+                'message': f'Certificate error: {str(e)}'
             }, status=400)
+        except Exception as e:
+            logger.error(f"Error in bulk fetch: {str(e)}")
+            return JsonResponse({
+                'success': False,
+                'message': f'Error during fetch: {str(e)}'
+            }, status=500)
             
     except Exception as e:
-        logger.error(f"Error starting BNSF fetch: {str(e)}")
+        logger.error(f"Unexpected error in start_bnsf_fetch: {str(e)}", exc_info=True)
         return JsonResponse({
             'success': False,
-            'message': 'An error occurred while starting the fetch process'
+            'message': 'An unexpected error occurred while starting the fetch process'
         }, status=500)
 
 @login_required

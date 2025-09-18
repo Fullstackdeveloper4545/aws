@@ -6,3 +6,4 @@ whitenoise
 boto3
 requests
 cryptography
+urllib3

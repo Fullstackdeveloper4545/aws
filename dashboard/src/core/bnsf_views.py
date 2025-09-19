@@ -2,6 +2,9 @@ from django.shortcuts import render, get_object_or_404, redirect
 from django.contrib.auth.decorators import login_required
 from django.contrib import messages
 from django.http import JsonResponse
+from django.core.cache import cache
+import uuid
+import threading
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_http_methods
 import json
@@ -165,6 +168,8 @@ def start_bnsf_fetch(request):
         
         certificate_id = request.POST.get('certificate_id')
         api_url = request.POST.get('api_url', 'https://api-trial.bnsf.com:6443/v1/cars')
+        # Use default known waybill endpoint; no need to ask on frontend
+        waybill_api_url = 'https://api-trial.bnsf.com:6443/v1/waybill'
         skip_ssl = request.POST.get('skip_ssl', 'false').lower() == 'true'
         
         if not certificate_id:
@@ -177,7 +182,10 @@ def start_bnsf_fetch(request):
         # Update certificate with new settings
         try:
             certificate = get_object_or_404(BNSFCertificate, id=certificate_id)
+            # Persist provided endpoints
             certificate.api_url = api_url
+            certificate.cars_api_url = api_url
+            certificate.waybill_api_url = waybill_api_url
             certificate.skip_verify = skip_ssl
             certificate.save()
             logger.info(f"Updated certificate {certificate.name} with new settings")
@@ -188,26 +196,81 @@ def start_bnsf_fetch(request):
                 'message': f'Error updating certificate: {str(e)}'
             }, status=500)
         
-        # Start fetch process
+        # Start fetch process: fetch cars, extract pairs, fetch and save waybills
         try:
             fetcher = BNSFDataFetcher(certificate.id)
-            result = fetcher.fetch_all_cars()
-            
-            if result['success']:
-                logger.info("Bulk fetch completed successfully")
-                return JsonResponse({
-                    'success': True,
-                    'message': 'Data fetch completed successfully',
-                    'job_id': 'bnsf_fetch_' + str(certificate.id),
-                    'data': result.get('data', {})
-                })
-            else:
-                error_msg = result.get('error', 'Failed to start data fetch')
-                logger.error(f"Bulk fetch failed: {error_msg}")
-                return JsonResponse({
-                    'success': False,
-                    'message': error_msg
-                }, status=400)
+
+            # Create a unique job id for this run
+            job_id = f"bnsf_fetch_{certificate.id}_{uuid.uuid4().hex[:8]}"
+            cache_key = f"bnsf_progress_{job_id}"
+            cache.set(cache_key, {
+                'success': True,
+                'done': False,
+                'total': 0,
+                'processed': 0,
+                'successful': 0,
+                'failed': 0,
+                'total_waybills_in_db': 0,
+                'message': 'Starting fetch...'
+            }, timeout=60*30)
+
+            # Inner helper to push progress
+            def update_progress(total=None, processed=None, successful=None, failed=None, message=None):
+                state = cache.get(cache_key) or {}
+                if total is not None: state['total'] = total
+                if processed is not None: state['processed'] = processed
+                if successful is not None: state['successful'] = successful
+                if failed is not None: state['failed'] = failed
+                if message is not None: state['message'] = message
+                state['total_waybills_in_db'] = BNSFWaybill.objects.count()
+                cache.set(cache_key, state, timeout=60*30)
+
+            # Run the long job in a background thread so the frontend can poll immediately
+            def run_job():
+                try:
+                    # Fetch cars first
+                    cars_result = fetcher.fetch_all_cars()
+                    if not cars_result.get('success'):
+                        update_progress(message=cars_result.get('error', 'Failed to fetch cars'))
+                        state = cache.get(cache_key) or {}
+                        state.update({'done': True})
+                        cache.set(cache_key, state, timeout=60*30)
+                        return
+
+                    cars_payload = cars_result.get('data')
+                    pairs = fetcher._extract_equipment_pairs(cars_payload)
+                    total_pairs = len(pairs)
+                    update_progress(total=total_pairs, processed=0, successful=0, failed=0, message=f'Found {total_pairs} cars')
+
+                    # Process waybills sequentially to support frequent progress updates
+                    processed = successful = failed = 0
+                    for p in pairs:
+                        res = fetcher.fetch_single_waybill(p['equipment_initial'], p['equipment_number'])
+                        processed += 1
+                        if res.get('success'):
+                            successful += 1
+                        else:
+                            failed += 1
+                        if processed % 1 == 0:
+                            update_progress(total=total_pairs, processed=processed, successful=successful, failed=failed, message='Processing waybills...')
+
+                    state = cache.get(cache_key) or {}
+                    state.update({'done': True, 'message': 'Fetch completed'})
+                    cache.set(cache_key, state, timeout=60*30)
+                except Exception as e:
+                    state = cache.get(cache_key) or {}
+                    state.update({'done': True, 'message': f'Error: {str(e)}'})
+                    cache.set(cache_key, state, timeout=60*30)
+
+            t = threading.Thread(target=run_job, daemon=True)
+            t.start()
+
+            # Return immediately with the job id; frontend will poll
+            return JsonResponse({
+                'success': True,
+                'message': 'Fetch started',
+                'job_id': job_id,
+            })
                 
         except ValueError as e:
             logger.error(f"Certificate error in bulk fetch: {str(e)}")
@@ -233,17 +296,30 @@ def start_bnsf_fetch(request):
 def get_bnsf_progress(request, job_id):
     """Get BNSF fetch progress"""
     try:
-        # For now, return mock progress data
-        # In a real implementation, this would track actual progress
+        cache_key = f"bnsf_progress_{job_id}"
+        state = cache.get(cache_key)
+
+        if not state:
+            # Fallback: show DB count if no cached summary
+            return JsonResponse({
+                'success': True,
+                'done': True,
+                'total': 0,
+                'processed': 0,
+                'successful': 0,
+                'failed': 0,
+                'total_waybills_in_db': BNSFWaybill.objects.count(),
+                'message': 'No recent fetch summary found'
+            })
         return JsonResponse({
             'success': True,
-            'done': True,
-            'total': 0,
-            'processed': 0,
-            'successful': 0,
-            'failed': 0,
-            'total_waybills_in_db': BNSFWaybill.objects.count(),
-            'message': 'Fetch completed'
+            'done': bool(state.get('done', False)),
+            'total': state.get('total', 0),
+            'processed': state.get('processed', 0),
+            'successful': state.get('successful', 0),
+            'failed': state.get('failed', 0),
+            'total_waybills_in_db': state.get('total_waybills_in_db', BNSFWaybill.objects.count()),
+            'message': state.get('message', ''),
         })
     except Exception as e:
         logger.error(f"Error getting BNSF progress: {str(e)}")

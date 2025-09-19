@@ -553,13 +553,17 @@ document.addEventListener('DOMContentLoaded', function() {
     }
     
     function pollProgress(jobId) {
+        const logEl = document.getElementById('resultMessage');
         const pollInterval = setInterval(() => {
             fetch(`{% url "core:api_get_bnsf_progress" "JOB_ID" %}`.replace('JOB_ID', jobId))
             .then(response => response.json())
             .then(data => {
                 if (data.success) {
                     updateProgress(data.total, data.processed, data.successful, data.failed, data.total_waybills_in_db || 0);
-                    
+                    if (logEl && data.message) {
+                        logEl.innerText = data.message;
+                        resultContainer.style.display = 'block';
+                    }
                     if (data.done) {
                         clearInterval(pollInterval);
                         startFetchBtn.disabled = false;

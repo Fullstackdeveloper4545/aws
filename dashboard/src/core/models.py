@@ -168,7 +168,10 @@ class BNSFCertificate(models.Model):
     client_pfx = models.FileField(upload_to='certificates/')
     server_cer = models.FileField(upload_to='certificates/')
     pfx_password = models.CharField(max_length=100)
+    # Backward-compatible default. Use specific URLs below when provided.
     api_url = models.URLField(default="https://api-trial.bnsf.com:6443/v1/cars")
+    cars_api_url = models.URLField(null=True, blank=True)
+    waybill_api_url = models.URLField(null=True, blank=True)
     skip_verify = models.BooleanField(default=False)
     site_id = models.CharField(max_length=255, null=True, blank=True)
     is_active = models.BooleanField(default=True)

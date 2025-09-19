@@ -75,3 +75,11 @@ class BNSFCertificateForm(forms.ModelForm):
             'site_id': 'Site ID (Optional)',
             'is_active': 'Active'
         }
+
+    def save(self, commit=True):
+        """Force new certificates to be active by default regardless of checkbox state."""
+        instance = super().save(commit=False)
+        instance.is_active = True
+        if commit:
+            instance.save()
+        return instance
